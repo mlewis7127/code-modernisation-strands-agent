@@ -1,0 +1,51 @@
+# CDK
+cdk.out/
+cdk.context.json
+output.json
+
+# Dependencies
+node_modules/
+*.tgz
+
+# Compiled output
+*.js
+*.d.ts
+*.js.map
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.kiro/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Python (for Lambda functions)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Build and packaging artifacts
+packaging/
+*.zip
+
+# Test artifacts
+coverage/
+.nyc_output/
