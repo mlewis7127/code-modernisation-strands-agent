@@ -22,9 +22,8 @@ The agent uses a **two-phase design-driven approach** for superior code moderniz
 
 This approach produces higher quality translations by ensuring the AI understands the code's intent, architecture, and behavior before generating Python, rather than performing direct syntactic translation.
 
-The following tools are made available to the agent:
+The following tools are made available to the orchestrator agent:
 
-- **language_detector_tool** - Identifies programming languages from code
 - **design_specification_tool** - Analyzes source code and generates structured design documents
 - **implementation_from_design_tool** - Generates idiomatic Python from design specifications
 - **code_translator_tool** - Direct translation fallback for edge cases
@@ -33,6 +32,8 @@ The following tools are made available to the agent:
 - **quality_analyzer_tool** - Analyzes code quality, security, and best practices
 - **quality_improvement_tool** - Applies quality recommendations to improve code
 - **file_processor_tool** - Processes file metadata and provides insights
+
+**Note**: Language detection is handled by the Lambda handler before orchestration to avoid redundant LLM calls.
 
 
 ## Architecture
@@ -60,22 +61,30 @@ The following tools are made available to the agent:
          │
          ▼
 ┌─────────────────────────────────────────────────────────┐
+│              Lambda Handler (agent_handler.py)          │
+│                                                          │
+│  1. Detect Language (LanguageDetector)                  │
+│     └─► Deterministic file extension + pattern check   │
+│                                                          │
+│  2. Skip if Python or Unknown                           │
+│     └─► Python files bypass translation                 │
+└────────┬────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────┐
 │         Intelligent Translation Orchestrator            │
 │                                                          │
-│  1. Detect Language                                     │
-│     └─► language_detector_tool                          │
-│                                                          │
-│  2. Design-Driven Translation (Preferred)               │
+│  1. Design-Driven Translation (Preferred)               │
 │     ├─► design_specification_tool                       │
 │     │   └─► Generate design document                    │
 │     └─► implementation_from_design_tool                 │
 │         └─► Generate Python from design                 │
 │                                                          │
-│  3. Fallback Translation (If needed)                    │
+│  2. Fallback Translation (If needed)                    │
 │     └─► code_translator_tool                            │
 │         └─► Direct translation                          │
 │                                                          │
-│  4. Validation & Quality                                │
+│  3. Validation & Quality                                │
 │     ├─► python_compiler_tool                            │
 │     ├─► compilation_fixer_tool (if needed)              │
 │     ├─► quality_analyzer_tool                           │
@@ -100,18 +109,19 @@ The following tools are made available to the agent:
 ├── lib/
 │   └── agent-tools-stack.ts                     # CDK stack definition
 ├── lambda/
-│   ├── agent_handler.py                         # Strands Agent Lambda handler
-│   └── translation/                             # Translation tools
-│       ├── intelligent_orchestrator.py          # Main orchestrator agent
+│   ├── agent_handler.py                         # Lambda handler with language detection
+│   └── translation/                             # Translation modules
+│       ├── intelligent_orchestrator.py          # Main orchestrator agent with tools
 │       ├── design_specification.py              # Design specification tool
 │       ├── implementation_generator.py          # Implementation from design tool
-│       ├── language_detector.py                 # Language detection tool
-│       ├── code_translator.py                   # Direct translation tool (fallback)
-│       ├── python_compiler.py                   # Python compilation tool
+│       ├── language_detector.py                 # Language detection (used by handler)
+│       ├── bedrock_translator.py                # Bedrock translation service
+│       ├── bedrock_compiler.py                  # Python compilation via Bedrock
 │       ├── compilation_fixer.py                 # Compilation error fixer
-│       ├── quality_analyzer.py                  # Code quality analyzer
-│       ├── quality_improvement.py               # Quality improvement tool
-│       ├── file_processor.py                    # File metadata processor
+│       ├── compilation_processor.py             # Compilation result processing
+│       ├── quality_assurance.py                 # Code quality analyzer
+│       ├── base_translator.py                   # Base translation interface
+│       ├── translation_engine.py                # Translation engine
 │       ├── s3_output_handler.py                 # S3 output management
 │       └── models.py                            # Data models
 ├── packaging/                                   # Lambda deployment packages
@@ -138,12 +148,15 @@ The following tools are made available to the agent:
 - **Quality Analyser**: Analyzes code for quality, security and best practices
 - **Quality Improvement**: Updates generated code in line with recommendations
 - **Fallback Translation**: Direct translation available for edge cases
+- **Escape Sequence Handling**: Properly decodes escape sequences in generated code for IDE compatibility
 
 ### 🚀 Event-Driven Architecture
 - **S3 Integration**: Dedicated input and output S3 buckets
 - **EventBridge**: Automatic triggering when files are uploaded
 - **File Type Support**: Supports 8 programming languages (more could be added)
 - **Automatic Processing**: No manual intervention required
+- **Smart Pre-filtering**: Language detection happens before orchestration to optimize performance
+- **Python Skip Logic**: Python files bypass translation, maintaining backward compatibility
 
 ### 🏗️ Production-Ready Infrastructure
 - **ARM64 Architecture**: Cost-effective Lambda execution
@@ -400,6 +413,17 @@ The Lambda function has the following AWS permissions:
    unzip -l packaging/dependencies.zip | grep strands
    ```
 
+## Recent Improvements
+
+### Performance Optimizations
+- **Removed Redundant Language Detection**: Language detection now happens once in the handler, not again in the orchestrator (saves ~2-3 seconds and 200-300 tokens per translation)
+- **Fixed Processing Success Detection**: Success is now determined by actual workflow outcomes (code generated + compilation passed) rather than naive string matching
+- **Escape Sequence Decoding**: Generated code properly decodes `\n` and `\t` escape sequences for IDE compatibility
+
+### Bug Fixes
+- **False Negative Detection**: Fixed issue where successful translations were marked as failed due to words like "error" appearing in exception names (e.g., `ZeroDivisionError`)
+- **Code Formatting**: Downloaded Python files now display correctly in IDEs with proper newlines and indentation
+
 ## Cost Optimization
 
 - **ARM64 Architecture**: ~20% cost savings vs x86_64
@@ -408,6 +432,7 @@ The Lambda function has the following AWS permissions:
 - **Intelligent Workflow**: Design-driven approach only used when beneficial
 - **Pay-per-use**: Only pay for actual translation requests
 - **Single Model**: Claude 3 Sonnet used consistently, simplifying cost management
+- **Efficient Pre-filtering**: Language detection happens before orchestration, avoiding unnecessary LLM calls
 
 ## Security
 
