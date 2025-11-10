@@ -1,0 +1,58 @@
+public class Calculator {
+    
+    /**
+     * Adds two numbers together
+     * @param a First number
+     * @param b Second number
+     * @return Sum of a and b
+     */
+    public int add(int a, int b) {
+        return a + b;
+    }
+    
+    /**
+     * Subtracts b from a
+     * @param a First number
+     * @param b Second number
+     * @return Difference of a and b
+     */
+    public int subtract(int a, int b) {
+        return a - b;
+    }
+    
+    /**
+     * Multiplies two numbers
+     * @param a First number
+     * @param b Second number
+     * @return Product of a and b
+     */
+    public int multiply(int a, int b) {
+        return a * b;
+    }
+    
+    /**
+     * Divides a by b
+     * @param a Numerator
+     * @param b Denominator
+     * @return Quotient of a divided by b
+     * @throws ArithmeticException if b is zero
+     */
+    public double divide(int a, int b) {
+        if (b == 0) {
+            throw new ArithmeticException("Cannot divide by zero");
+        }
+        return (double) a / b;
+    }
+    
+    /**
+     * Main method to test the calculator
+     */
+    public static void main(String[] args) {
+        Calculator calc = new Calculator();
+        
+        System.out.println("Addition: 10 + 5 = " + calc.add(10, 5));
+        System.out.println("Subtraction: 10 - 5 = " + calc.subtract(10, 5));
+        System.out.println("Multiplication: 10 * 5 = " + calc.multiply(10, 5));
+        System.out.println("Division: 10 / 5 = " + calc.divide(10, 5));
+    }
+}

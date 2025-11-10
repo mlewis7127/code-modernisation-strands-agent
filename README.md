@@ -13,10 +13,21 @@ This is a working prototype of a model driven approach using the Strands Agent S
 
 The model driven approach uses an Agent acting as an orchestrator. Instead of coding for every scenario, it relies on the agent and its underlying large language model to drive its own behaviour. This allows it to figure out which tools to call and in which order, to translate the code to Python, ensure the generated code compiles, and that it is of the highest quality.
 
+### 🎯 Design-Driven Translation
+
+The agent uses a **two-phase design-driven approach** for superior code modernization:
+
+1. **Design Phase**: Analyzes source code to generate a structured design specification document
+2. **Implementation Phase**: Uses the design specification to generate idiomatic Python code
+
+This approach produces higher quality translations by ensuring the AI understands the code's intent, architecture, and behavior before generating Python, rather than performing direct syntactic translation.
+
 The following tools are made available to the agent:
 
 - **language_detector_tool** - Identifies programming languages from code
-- **code_translator_tool** - Translates code between programming languages
+- **design_specification_tool** - Analyzes source code and generates structured design documents
+- **implementation_from_design_tool** - Generates idiomatic Python from design specifications
+- **code_translator_tool** - Direct translation fallback for edge cases
 - **python_compiler_tool** - Compiles and validates Python code using Bedrock AgentCore
 - **compilation_fixer_tool** - Automatically fixes compilation errors in Python code
 - **quality_analyzer_tool** - Analyzes code quality, security, and best practices
@@ -28,41 +39,105 @@ The following tools are made available to the agent:
 
 - **AWS Lambda**: Python 3.12 function with Strands Agents SDK
 - **Lambda Layer**: Contains all dependencies including Strands Agents SDK and tools
-- **Amazon Bedrock**: AI model provider
-- **S3 Buckets**: Input bucket for code files, output bucket for analysis results
+- **Amazon Bedrock**: AI model provider (Claude 3 Sonnet)
+- **S3 Buckets**: Input bucket for code files, output bucket for translated code and design documents
 - **EventBridge**: Triggers Lambda function when files are uploaded to S3
 - **CloudWatch**: Logging and monitoring
 - **CDK**: Infrastructure as Code using TypeScript
+
+### Translation Workflow
+
+```
+┌─────────────────┐
+│  Upload Code    │
+│   to S3 Input   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────┐
+│              EventBridge Trigger                        │
+└────────┬────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────┐
+│         Intelligent Translation Orchestrator            │
+│                                                          │
+│  1. Detect Language                                     │
+│     └─► language_detector_tool                          │
+│                                                          │
+│  2. Design-Driven Translation (Preferred)               │
+│     ├─► design_specification_tool                       │
+│     │   └─► Generate design document                    │
+│     └─► implementation_from_design_tool                 │
+│         └─► Generate Python from design                 │
+│                                                          │
+│  3. Fallback Translation (If needed)                    │
+│     └─► code_translator_tool                            │
+│         └─► Direct translation                          │
+│                                                          │
+│  4. Validation & Quality                                │
+│     ├─► python_compiler_tool                            │
+│     ├─► compilation_fixer_tool (if needed)              │
+│     ├─► quality_analyzer_tool                           │
+│     └─► quality_improvement_tool                        │
+└────────┬────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────┐
+│              Save Results to S3 Output                  │
+│  • {filename}.py (Python code)                          │
+│  • {filename}_design.md (Design specification)          │
+│  • {filename}_metadata.json (Translation metadata)      │
+└─────────────────────────────────────────────────────────┘
+```
 
 ## Project Structure
 
 ```
 ├── bin/
-│   ├── agent-as-tools.ts            # CDK app entry point
-│   └── package_for_lambda.py        # Lambda packaging script
+│   ├── agent-as-tools.ts                        # CDK app entry point
+│   └── package_for_lambda.py                    # Lambda packaging script
 ├── lib/
-│   └── agent-tools-stack.ts         # CDK stack definition
+│   └── agent-tools-stack.ts                     # CDK stack definition
 ├── lambda/
-│   └── agent_handler.py             # Strands Agent Lambda handler
-├── packaging/                       # Lambda deployment packages
-│   ├── app.zip                      # Lambda function code
-│   ├── dependencies.zip             # Lambda layer dependencies
-│   └── _dependencies/               # Installed Python packages
+│   ├── agent_handler.py                         # Strands Agent Lambda handler
+│   └── translation/                             # Translation tools
+│       ├── intelligent_orchestrator.py          # Main orchestrator agent
+│       ├── design_specification.py              # Design specification tool
+│       ├── implementation_generator.py          # Implementation from design tool
+│       ├── language_detector.py                 # Language detection tool
+│       ├── code_translator.py                   # Direct translation tool (fallback)
+│       ├── python_compiler.py                   # Python compilation tool
+│       ├── compilation_fixer.py                 # Compilation error fixer
+│       ├── quality_analyzer.py                  # Code quality analyzer
+│       ├── quality_improvement.py               # Quality improvement tool
+│       ├── file_processor.py                    # File metadata processor
+│       ├── s3_output_handler.py                 # S3 output management
+│       └── models.py                            # Data models
+├── packaging/                                   # Lambda deployment packages
+│   ├── app.zip                                  # Lambda function code
+│   ├── dependencies.zip                         # Lambda layer dependencies
+│   └── _dependencies/                           # Installed Python packages
 ├── test/
-│   └── agent-loop.test.ts           # CDK unit tests
-├── cdk.json                         # CDK configuration
-├── requirements.txt                 # Python dependencies
-└── README.md                        # This file
+│   └── agent-loop.test.ts                       # CDK unit tests
+├── test_backward_compatibility.py               # Backward compatibility tests
+├── test_fallback_verification.py                # Fallback mechanism tests
+├── cdk.json                                     # CDK configuration
+├── requirements.txt                             # Python dependencies
+└── README.md                                    # This file
 ```
 
 ## Features
 
 ### 🤖 AI-Powered Code Modernisation
-- **Code Translation**: Translates code from other formats into the Python programming language
-- **Code Compiler**: Compiles generated Python code
-- **Code Fixer**: Fix compilation errors
-- **Quality Analyser**: Analyse code for code quality, security and best practices
+- **Design-Driven Translation**: Two-phase approach that analyzes code intent before generating Python
+- **Design Specification**: Generates structured design documents capturing architecture and behavior
+- **Idiomatic Python Generation**: Creates Python code following best practices and PEP 8 guidelines
+- **Code Compiler**: Compiles generated Python code using Bedrock AgentCore
+- **Code Fixer**: Automatically fixes compilation errors
+- **Quality Analyser**: Analyzes code for quality, security and best practices
 - **Quality Improvement**: Updates generated code in line with recommendations
+- **Fallback Translation**: Direct translation available for edge cases
 
 ### 🚀 Event-Driven Architecture
 - **S3 Integration**: Dedicated input and output S3 buckets
@@ -73,9 +148,12 @@ The following tools are made available to the agent:
 ### 🏗️ Production-Ready Infrastructure
 - **ARM64 Architecture**: Cost-effective Lambda execution
 - **Lambda Layers**: Efficient dependency management
+- **Extended Timeout**: 300 seconds for complex design-driven workflows
+- **Increased Memory**: 2048 MB for AI translation workloads
 - **Auto-scaling**: Serverless scaling based on demand
 - **Monitoring**: CloudWatch logs and metrics
 - **Security**: IAM roles with least-privilege access
+- **Backward Compatibility**: Python files skip design generation, maintaining existing workflows
 
 ## Prerequisites
 
@@ -141,7 +219,9 @@ npx cdk deploy --require-approval never
 The application uses **Claude 3 Sonnet** for all tasks:
 
 - **Orchestrator Agent**: Workflow decisions and tool coordination
-- **Code Translator**: Cross-language translation accuracy
+- **Design Specification**: Analyzing code architecture and intent
+- **Implementation Generator**: Creating idiomatic Python from designs
+- **Code Translator**: Cross-language translation accuracy (fallback)
 - **Compilation Fixer**: Understanding and fixing Python errors
 - **Quality Analyzer**: Code quality, security, and best practices analysis
 - **Quality Improver**: Applying recommendations to enhance code
@@ -152,17 +232,50 @@ This approach provides **consistent, reliable performance** with a proven, stabl
 
 After deployment, you can interact with the agent in multiple ways:
 
-### 🔄 Event-Driven S3 Analysis (Recommended)
+### 🔄 Event-Driven S3 Translation (Recommended)
 
-Simply upload code files to the input S3 bucket and analysis will happen automatically:
+Simply upload code files to the input S3 bucket and translation will happen automatically:
 
 ```bash
-# Upload a code file for automatic analysis
-aws s3 cp your_code.py s3://agents-as-tools-input-dev-YOUR_ACCOUNT_ID/
+# Upload a code file for automatic translation
+aws s3 cp your_code.js s3://agents-as-tools-input-dev-YOUR_ACCOUNT_ID/
 
 # Check the output bucket for results
-aws s3 ls s3://agents-as-tools-output-dev-YOUR_ACCOUNT_ID/analysis/
+aws s3 ls s3://agents-as-tools-output-dev-YOUR_ACCOUNT_ID/translated/
 ```
+
+### 📄 Output Files
+
+For each translated file, the agent generates:
+
+- **`{filename}.py`** - The translated Python code
+- **`{filename}_design.md`** - The design specification document (for design-driven translations)
+- **`{filename}_metadata.json`** - Translation metadata including approach used, timing, and quality metrics
+
+Example output structure:
+```
+translated/
+├── example.py                    # Translated Python code
+├── example_design.md             # Design specification
+└── example_metadata.json         # Translation metadata
+```
+
+### 🔍 Translation Workflow
+
+The agent automatically determines the best translation approach:
+
+1. **Design-Driven (Preferred)**: For non-Python code files
+   - Generates design specification analyzing code architecture
+   - Creates idiomatic Python implementation from design
+   - Produces higher quality, more maintainable code
+
+2. **Direct Translation (Fallback)**: Used when design generation fails or for edge cases
+   - Faster but may produce less idiomatic Python
+   - Automatically triggered if design-driven approach encounters issues
+
+3. **Skip Translation**: Python files are validated and analyzed without translation
+   - Maintains backward compatibility
+   - Focuses on quality analysis and improvement
 
 ## Development
 
@@ -177,7 +290,47 @@ npx cdk synth
 
 # Compare with deployed stack
 npx cdk diff
+
+# Test backward compatibility
+python test_backward_compatibility.py
+
+# Test fallback mechanisms
+python test_fallback_verification.py
 ```
+
+### Testing the Design-Driven Workflow
+
+The project includes comprehensive tests to verify the design-driven translation feature:
+
+**Backward Compatibility Tests** (`test_backward_compatibility.py`):
+- ✅ Python files skip design generation (Requirement 1.5)
+- ✅ EventBridge S3 trigger mechanism works (Requirement 5.1)
+- ✅ IAM permissions are sufficient (Requirement 5.3)
+- ✅ Lambda timeout and memory adequate (Requirement 5.4)
+- ✅ Bedrock model consistency maintained (Requirement 5.2)
+
+**Fallback Verification Tests** (`test_fallback_verification.py`):
+- ✅ Design generation failures trigger fallback to direct translation
+- ✅ Implementation failures trigger fallback to direct translation
+- ✅ Error messages are clear and actionable
+- ✅ Partial results are saved for debugging
+
+### Design Specification Format
+
+The design specification tool generates structured markdown documents with the following sections:
+
+- **Overview**: High-level description of what the code does
+- **Functionality**: Detailed description of features and capabilities
+- **Architecture**: Overall structure and organization
+- **Components**: Major components/classes/modules with descriptions
+- **Data Structures**: Key data types, classes, interfaces, or structures
+- **Algorithms and Logic**: Important algorithms and business logic
+- **Dependencies**: External libraries, APIs, or system dependencies
+- **Input/Output**: Expected inputs and outputs
+- **Error Handling**: How errors are handled in the original code
+- **Special Considerations**: Language-specific features and performance notes
+
+This structured approach ensures the implementation phase has complete context about the code's intent and architecture.
 
 ### Adding New Features
 
@@ -222,12 +375,12 @@ The Lambda function has the following AWS permissions:
 - **Solution**: Re-run `python bin/package_for_lambda.py` and redeploy
 
 **3. Lambda Timeout**
-- **Cause**: Complex analysis taking too long
-- **Solution**: Increase timeout in CDK stack (currently 60 seconds)
+- **Cause**: Complex translation taking too long
+- **Solution**: Timeout is set to 300 seconds for design-driven workflows; check CloudWatch logs for specific errors
 
 **4. Memory Issues**
-- **Cause**: Large dependencies or complex analysis
-- **Solution**: Increase memory size in CDK stack (currently 1024 MB)
+- **Cause**: Large dependencies or complex translation
+- **Solution**: Memory is set to 2048 MB for AI translation workloads; check CloudWatch logs for specific errors
 
 ### Debugging
 
@@ -251,8 +404,10 @@ The Lambda function has the following AWS permissions:
 
 - **ARM64 Architecture**: ~20% cost savings vs x86_64
 - **Lambda Layers**: Reduces deployment package size
-- **Efficient Memory**: 1024 MB balances performance and cost
-- **Pay-per-use**: Only pay for actual analysis requests
+- **Optimized Memory**: 2048 MB balances performance and cost for AI workloads
+- **Intelligent Workflow**: Design-driven approach only used when beneficial
+- **Pay-per-use**: Only pay for actual translation requests
+- **Single Model**: Claude 3 Sonnet used consistently, simplifying cost management
 
 ## Security
 

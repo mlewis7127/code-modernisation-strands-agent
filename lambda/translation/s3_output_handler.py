@@ -80,6 +80,9 @@ class S3OutputHandler:
                 saved_files['analysis'] = analysis_key
                 logger.info(f"Saved original analysis to: s3://{bucket}/{analysis_key}")
             
+            # Design document saving removed for simplicity
+            # The full orchestrator response (including design spec) is saved in the analysis file
+            
             # Save translated code if available
             if processing_output.translated_code:
                 python_key = self._generate_python_code_key(original_key, timestamp)
@@ -114,9 +117,11 @@ class S3OutputHandler:
             })
             
             # Save metadata AFTER updating output_files and processing_metadata
+            logger.info(f"[OUTPUT] Saving processing metadata")
+            logger.info(f"[OUTPUT] Total files saved: {len(saved_files)}")
             self._save_processing_metadata(bucket, metadata_key, processing_output, 
                                          original_key, request_id)
-            logger.info(f"Saved processing metadata to: s3://{bucket}/{metadata_key}")
+            logger.info(f"[OUTPUT] Saved processing metadata to: s3://{bucket}/{metadata_key}")
             
             return saved_files
             
@@ -212,6 +217,17 @@ class S3OutputHandler:
         
         return f"{self.directories['translated']}{base_name}_{timestamp}_translated.py"
     
+    def _generate_design_document_key(self, original_key: str, timestamp: str) -> str:
+        """Generate S3 key for design specification document."""
+        # Extract filename without extension
+        filename = original_key.split('/')[-1]
+        if '.' in filename:
+            base_name = '.'.join(filename.split('.')[:-1])
+        else:
+            base_name = filename
+        
+        return f"{self.directories['translated']}{base_name}_{timestamp}_design.md"
+    
     def _generate_metadata_key(self, original_key: str, timestamp: str, suffix: str = "") -> str:
         """Generate S3 key for metadata files."""
         safe_key = original_key.replace('/', '_')
@@ -277,6 +293,28 @@ class S3OutputHandler:
             Key=key,
             Body=python_code,
             ContentType='text/x-python',
+            Metadata=metadata
+        )
+    
+    def _save_design_document(self,
+                            bucket: str,
+                            key: str,
+                            design_document: str,
+                            original_key: str,
+                            request_id: str) -> None:
+        """Save design specification document."""
+        metadata = {
+            'source-key': original_key,
+            'request-id': request_id,
+            'content-type': 'design-specification',
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        self.s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=design_document,
+            ContentType='text/markdown',
             Metadata=metadata
         )
     
@@ -357,12 +395,14 @@ class S3OutputHandler:
             'directories': self.directories,
             'naming_conventions': {
                 'analysis': '{original_key}_{timestamp}_analysis.md',
+                'design_document': '{base_name}_{timestamp}_design.md',
                 'translated_code': '{base_name}_{timestamp}_translated.py',
                 'metadata': '{original_key}_{timestamp}_metadata.json',
                 'errors': '{original_key}_{timestamp}_errors.json'
             },
             'content_types': {
                 'analysis': 'text/markdown',
+                'design_document': 'text/markdown',
                 'translated_code': 'text/x-python',
                 'metadata': 'application/json',
                 'errors': 'application/json'

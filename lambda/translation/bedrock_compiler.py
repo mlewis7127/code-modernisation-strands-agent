@@ -174,8 +174,23 @@ class BedrockCompiler:
             # Note: The API uses invoke method with method and params
             response = self.client.invoke(method="executeCode", params=execution_request)
             
+            # Process the event stream to get the result
+            # The response contains a 'stream' that we need to iterate through
+            result_data = None
+            if "stream" in response:
+                logger.debug("[COMPILER] Processing event stream from Bedrock AgentCore")
+                for event in response["stream"]:
+                    if "result" in event:
+                        result_data = event["result"]
+                        logger.debug(f"[COMPILER] Found result in stream event: {json.dumps(result_data, default=str)[:200]}...")
+                        break
+            
+            if not result_data:
+                logger.warning("[COMPILER] No result found in stream, using raw response")
+                result_data = response
+            
             # Parse the response and create compilation result
-            return self._parse_execution_response(response)
+            return self._parse_execution_response(result_data)
             
         except Exception as e:
             logger.error(f"Code execution failed: {str(e)}")
@@ -205,12 +220,47 @@ class BedrockCompiler:
         Returns:
             CompilationResult: Parsed compilation results
         """
+        # Log the response structure for debugging
+        logger.debug(f"[COMPILER] Response keys: {list(response.keys())}")
+        logger.debug(f"[COMPILER] Full execution response: {json.dumps(response, indent=2, default=str)[:500]}...")
+        
         # Initialize result
         result = CompilationResult(compilation_success=True)
         
-        # Extract execution results
-        if "output" in response:
-            result.execution_result = response["output"]
+        # Check for errors first
+        is_error = response.get("isError", False)
+        if is_error:
+            result.compilation_success = False
+            logger.warning("[COMPILER] Execution returned isError=True")
+        
+        # Extract execution results from the correct structure
+        # According to AWS docs: content[0].text or structuredContent.stdout
+        output = None
+        
+        # Try structuredContent.stdout first (most reliable for code execution)
+        if "structuredContent" in response and response["structuredContent"]:
+            structured = response["structuredContent"]
+            if "stdout" in structured:
+                output = structured["stdout"]
+                logger.info(f"[COMPILER] Found output in structuredContent.stdout: {len(output) if output else 0} chars")
+            if "stderr" in structured and structured["stderr"]:
+                logger.warning(f"[COMPILER] stderr: {structured['stderr']}")
+                if not output:  # If no stdout, use stderr as output
+                    output = structured["stderr"]
+        
+        # Try content array as fallback
+        if not output and "content" in response and response["content"]:
+            content_array = response["content"]
+            if isinstance(content_array, list) and len(content_array) > 0:
+                first_content = content_array[0]
+                if isinstance(first_content, dict) and "text" in first_content:
+                    output = first_content["text"]
+                    logger.info(f"[COMPILER] Found output in content[0].text: {len(output) if output else 0} chars")
+        
+        if output:
+            result.execution_result = output
+        else:
+            logger.warning(f"[COMPILER] No output found in response. Available keys: {list(response.keys())}")
         
         # Check for errors
         if "errors" in response and response["errors"]:

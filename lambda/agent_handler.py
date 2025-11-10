@@ -307,7 +307,66 @@ def process_s3_event(event: Dict[str, Any], context, start_time: float) -> Dict[
                 logger.error(f"[{request_id}] {translation_error}")
                 
         elif detected_language.lower() == 'python':
-            logger.info(f"[{request_id}] File is already Python, skipping translation")
+            logger.info(f"[{request_id}] File is already Python, running quality analysis and validation")
+            
+            try:
+                # Initialize orchestrator for Python-only processing
+                orchestrator = IntelligentTranslationOrchestrator(
+                    model_id="anthropic.claude-3-sonnet-20240229-v1:0",
+                    quality_model_id="anthropic.claude-3-sonnet-20240229-v1:0",
+                    region_name="us-east-1"
+                )
+                
+                # Prepare file info for Python processing
+                file_info = {
+                    'file_path': object_key,
+                    'key': object_key,
+                    'bucket': bucket_name,
+                    'size': actual_file_size,
+                    'etag': etag,
+                    'timestamp': timestamp,
+                    'detected_language': 'Python'
+                }
+                
+                # Run Python-specific workflow (compile, analyze, improve quality)
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    # Request Python-specific processing (no translation needed)
+                    user_request = "This is Python code. Compile and validate it, analyze code quality, and apply any recommended improvements."
+                    
+                    orchestration_result = loop.run_until_complete(
+                        orchestrator.process_code_request(file_content, file_info, user_request)
+                    )
+                    
+                    translation_output = orchestration_result.processing_output
+                    
+                    loop.close()
+                    
+                    if translation_output.processing_success:
+                        logger.info(f"[{request_id}] Python quality analysis completed successfully")
+                    else:
+                        translation_error = translation_output.error_message or "Python quality analysis completed with warnings"
+                        translation_error_type = "PYTHON_QUALITY_WARNING"
+                        logger.warning(f"[{request_id}] Python quality analysis: {translation_error}")
+                        
+                except asyncio.TimeoutError:
+                    translation_error = f"Python quality analysis timed out after 180 seconds"
+                    translation_error_type = "PYTHON_ANALYSIS_TIMEOUT"
+                    logger.error(f"[{request_id}] {translation_error}")
+                    
+                except Exception as analysis_exc:
+                    error_str = str(analysis_exc)
+                    translation_error = f"Python quality analysis failed: {error_str}"
+                    translation_error_type = "PYTHON_ANALYSIS_ERROR"
+                    logger.error(f"[{request_id}] {translation_error}")
+                    
+            except Exception as init_exc:
+                error_str = str(init_exc)
+                translation_error = f"Failed to initialize Python quality analysis: {error_str}"
+                translation_error_type = "PYTHON_INIT_ERROR"
+                logger.error(f"[{request_id}] {translation_error}")
         elif detected_language == 'unknown':
             logger.info(f"[{request_id}] Could not detect language, skipping translation")
         else:

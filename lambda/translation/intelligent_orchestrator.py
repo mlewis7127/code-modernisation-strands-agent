@@ -10,6 +10,7 @@ import logging
 import time
 import asyncio
 import json
+import re
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime
@@ -22,6 +23,8 @@ from .language_detector import LanguageDetector
 from .bedrock_translator import BedrockTranslator
 from .bedrock_compiler import BedrockCompiler
 from .compilation_fixer import CompilationFixer
+from .design_specification import design_specification_tool
+from .implementation_generator import implementation_from_design_tool
 
 logger = logging.getLogger(__name__)
 
@@ -38,33 +41,8 @@ class OrchestrationResult:
 
 
 # Specialist Agent Tools
-@tool
-def language_detector_tool(code_content: str, file_path: str) -> str:
-    """
-    Detect the programming language of source code.
-    
-    Args:
-        code_content: The source code to analyze
-        file_path: Path/name of the file (helps with detection)
-        
-    Returns:
-        String describing the detected language
-    """
-    try:
-        detector = LanguageDetector()
-        detected_language = detector.detect_language(file_path, code_content)
-        
-        confidence_info = ""
-        if hasattr(detector, 'get_detection_confidence'):
-            confidence = detector.get_detection_confidence(file_path, code_content)
-            confidence_info = f" (confidence: {confidence:.2f})"
-        
-        return f"Detected programming language: {detected_language}{confidence_info}"
-        
-    except Exception as e:
-        logger.error(f"Language detection failed: {str(e)}")
-        return f"Language detection failed: {str(e)}"
-
+# Note: Language detection is handled by the agent_handler before orchestration
+# to avoid redundant LLM calls. The detected language is passed in the user request.
 
 @tool
 def code_translator_tool(source_code: str, source_language: str, target_language: str = "python", file_path: str = "code") -> str:
@@ -397,7 +375,8 @@ class IntelligentTranslationOrchestrator:
             ),
             system_prompt=self._get_orchestrator_system_prompt(),
             tools=[
-                language_detector_tool,
+                design_specification_tool,
+                implementation_from_design_tool,
                 code_translator_tool,
                 python_compiler_tool,
                 compilation_fixer_tool,
@@ -415,18 +394,46 @@ class IntelligentTranslationOrchestrator:
         """Get the system prompt for the orchestrator agent."""
         return """You are an intelligent code translation and analysis orchestrator. Your role is to coordinate with specialist tools to handle code processing requests efficiently and intelligently.
 
+NOTE: The source code language has already been detected by the handler and is provided in the user request. You do not need to detect the language.
+
 AVAILABLE SPECIALIST TOOLS:
-1. language_detector_tool - Identifies programming languages from code
-2. code_translator_tool - Translates code between programming languages
-3. python_compiler_tool - Compiles and validates Python code using Bedrock AgentCore
-4. compilation_fixer_tool - Automatically fixes compilation errors in Python code
-5. quality_analyzer_tool - Analyzes code quality, security, and best practices
-6. quality_improvement_tool - Applies quality recommendations to improve code
-7. file_processor_tool - Processes file metadata and provides insights
+1. design_specification_tool - Analyzes source code and generates a structured design document describing functionality, architecture, and requirements (PREFERRED for non-Python code)
+2. implementation_from_design_tool - Generates idiomatic Python code from a design specification (PREFERRED for implementation)
+3. code_translator_tool - Translates code directly between programming languages (FALLBACK - use only if design-driven approach fails)
+4. python_compiler_tool - Compiles and validates Python code using Bedrock AgentCore
+5. compilation_fixer_tool - Automatically fixes compilation errors in Python code
+6. quality_analyzer_tool - Analyzes code quality, security, and best practices
+7. quality_improvement_tool - Applies quality recommendations to improve code
+8. file_processor_tool - Processes file metadata and provides insights
+
+DESIGN-DRIVEN TRANSLATION WORKFLOW (PREFERRED):
+For non-Python code, use this two-phase approach for higher quality translations:
+1. First, use design_specification_tool to analyze the source code and create a design document
+   - This captures the code's intent, architecture, data structures, and behavior
+   - The design document provides a language-agnostic understanding of what the code does
+2. Then, use implementation_from_design_tool to generate idiomatic Python from the design
+   - This produces well-structured, Pythonic code that implements the design
+   - Results in better code quality than direct syntactic translation
+
+Benefits of design-driven approach:
+- Captures intent and architecture, not just syntax
+- Generates more idiomatic and maintainable Python code
+- Better handles language-specific patterns and idioms
+- Provides design documentation as a valuable artifact
+
+FALLBACK TRANSLATION:
+- Use code_translator_tool ONLY if design_specification_tool fails or times out
+- Direct translation is faster but may produce less idiomatic Python code
+- If design-driven approach encounters errors, fall back gracefully to direct translation
 
 INTELLIGENT DECISION MAKING:
-- Only use tools when actually needed - don't follow a rigid sequence
-- If code is already Python, skip translation unless user specifically requests conversion
+- For non-Python code: Prefer design_specification_tool → implementation_from_design_tool workflow
+- For Python code: Focus on validation and quality improvement
+  * Use python_compiler_tool to validate the code
+  * Use quality_analyzer_tool to identify improvements
+  * Use quality_improvement_tool to apply recommendations
+  * Use compilation_fixer_tool if validation fails
+  * Skip translation tools (design_specification_tool, implementation_from_design_tool, code_translator_tool)
 - Only compile code if translation occurred, validation is requested, or there are concerns
 - Only fix compilation errors if compilation actually fails
 - Analyze quality when requested or when you identify potential issues
@@ -438,21 +445,30 @@ EFFICIENCY PRINCIPLES:
 - Use file_processor_tool first to understand file characteristics
 - Make decisions based on what you discover, not predetermined workflows
 - If user has specific requests, prioritize those over default processing
+- If design-driven approach fails, fall back to direct translation rather than failing completely
 
 RESPONSE FORMAT:
 Always provide clear reasoning for your decisions and summarize what you accomplished.
 Include the actual results from the tools you used.
 If you skip certain steps, explain why.
+If you use the design-driven approach, mention that you created a design specification first.
+
+CRITICAL: At the start of your response, list which tools you used in this format:
+Tools used: tool_name_1, tool_name_2, tool_name_3
 
 CRITICAL OUTPUT REQUIREMENT:
-If you translate code to Python or generate Python code through any tool, you MUST include the final Python code in your response using this exact format:
+If you translate code to Python, generate Python code, or improve existing Python code, you MUST include the final Python code in your response using this exact format:
 
 FINAL TRANSLATED CODE:
 ```python
 [complete Python code here]
 ```
 
-This is essential for code extraction. Always include this section when Python code is generated, even if tools already showed the code."""
+This is essential for code extraction. Always include this section when:
+- Python code is generated from translation
+- Python code is improved by quality_improvement_tool
+- Python code is fixed by compilation_fixer_tool
+Even if tools already showed the code, include the final version in this format."""
     
     async def process_code_request(self, 
                                  code_content: str, 
@@ -492,22 +508,98 @@ Please coordinate with the appropriate specialist tools to handle this request e
 Make intelligent decisions about which tools to use based on what you discover.
 Don't follow a rigid workflow - adapt based on the actual needs."""
             
-            logger.info("Starting intelligent orchestration process")
+            logger.info("=" * 80)
+            logger.info("[ORCHESTRATION] Starting intelligent orchestration process")
+            logger.info(f"[ORCHESTRATION] File: {file_info.get('file_path', 'unknown')}")
+            logger.info(f"[ORCHESTRATION] Code size: {len(code_content)} characters")
+            logger.info("=" * 80)
             
             # Let the orchestrator decide what to do
+            orchestration_start = time.time()
             response = self.orchestrator(context)
-            orchestrator_reasoning = str(response)
+            orchestration_time = time.time() - orchestration_start
             
-            # Extract information about tools used (this is a simplified approach)
-            # In a real implementation, you might want to track this more precisely
-            tool_names = [
-                "language_detector_tool", "code_translator_tool", "python_compiler_tool",
-                "compilation_fixer_tool", "quality_analyzer_tool", "quality_improvement_tool", "file_processor_tool"
-            ]
+            # Extract the actual response content
+            # The Strands Agent response object has different attributes we need to check
+            logger.info(f"[ORCHESTRATION] Response type: {type(response).__name__}")
+            logger.info(f"[ORCHESTRATION] Response attributes: {[attr for attr in dir(response) if not attr.startswith('_')]}")
             
-            for tool_name in tool_names:
-                if tool_name in orchestrator_reasoning:
-                    tools_used.append(tool_name)
+            # Try to get the full conversation/history including tool calls
+            orchestrator_reasoning = None
+            
+            # Check for conversation history or messages
+            # AgentResult.state contains the full conversation including tool calls
+            if hasattr(response, 'state') and response.state:
+                logger.info(f"[ORCHESTRATION] Found 'state' attribute")
+                logger.info(f"[ORCHESTRATION] State type: {type(response.state).__name__}")
+                logger.info(f"[ORCHESTRATION] State attributes: {[attr for attr in dir(response.state) if not attr.startswith('_')][:10]}")
+                
+                # The state contains messages list with the full conversation
+                if hasattr(response.state, 'messages') and response.state.messages:
+                    logger.info(f"[ORCHESTRATION] Found {len(response.state.messages)} messages in state")
+                    # Combine all messages to get the full conversation including tool calls
+                    orchestrator_reasoning = "\n\n".join([str(msg) for msg in response.state.messages])
+                    logger.info(f"[ORCHESTRATION] Combined messages length: {len(orchestrator_reasoning)} chars")
+                else:
+                    logger.warning(f"[ORCHESTRATION] State exists but no messages found, using str(state)")
+                    orchestrator_reasoning = str(response.state)
+            elif hasattr(response, 'message'):
+                logger.info(f"[ORCHESTRATION] Found 'message' attribute (final response only)")
+                orchestrator_reasoning = str(response.message)
+            elif hasattr(response, 'messages'):
+                logger.info(f"[ORCHESTRATION] Found 'messages' attribute with {len(response.messages)} messages")
+                # Combine all messages into the reasoning
+                orchestrator_reasoning = "\n\n".join([str(msg) for msg in response.messages])
+            elif hasattr(response, 'history'):
+                logger.info(f"[ORCHESTRATION] Found 'history' attribute")
+                orchestrator_reasoning = str(response.history)
+            elif hasattr(response, 'conversation'):
+                logger.info(f"[ORCHESTRATION] Found 'conversation' attribute")
+                orchestrator_reasoning = str(response.conversation)
+            elif hasattr(response, 'content'):
+                logger.info(f"[ORCHESTRATION] Using 'content' attribute")
+                orchestrator_reasoning = response.content
+            elif hasattr(response, 'text'):
+                logger.info(f"[ORCHESTRATION] Using 'text' attribute")
+                orchestrator_reasoning = response.text
+            elif hasattr(response, 'output'):
+                logger.info(f"[ORCHESTRATION] Using 'output' attribute")
+                orchestrator_reasoning = response.output
+            else:
+                logger.warning(f"[ORCHESTRATION] No known attribute found, using str(response)")
+                orchestrator_reasoning = str(response)
+            
+            logger.info(f"[ORCHESTRATION] Orchestrator completed in {orchestration_time:.2f} seconds")
+            logger.info(f"[ORCHESTRATION] Response length: {len(orchestrator_reasoning)} characters")
+            
+            # Extract information about tools used
+            # First, check if the agent listed tools in the response
+            tools_used_match = re.search(r'Tools used:\s*([^\n]+)', orchestrator_reasoning, re.IGNORECASE)
+            if tools_used_match:
+                tools_list = tools_used_match.group(1)
+                logger.info(f"[ORCHESTRATION] Found tools list in response: {tools_list}")
+                # Parse the comma-separated tool names
+                tools_used = [tool.strip() for tool in tools_list.split(',') if tool.strip()]
+            else:
+                # Fallback: Check if the agent response has tool call information
+                if hasattr(response, 'tool_calls') and response.tool_calls:
+                    logger.info(f"[ORCHESTRATION] Found {len(response.tool_calls)} tool calls in response object")
+                    for tool_call in response.tool_calls:
+                        tool_name = tool_call.get('name') if isinstance(tool_call, dict) else getattr(tool_call, 'name', None)
+                        if tool_name:
+                            tools_used.append(tool_name)
+                else:
+                    # Last resort: search for tool names in the response text
+                    logger.warning("[ORCHESTRATION] No tools list found, searching response text for tool names")
+                    tool_names = [
+                        "design_specification_tool", "implementation_from_design_tool",
+                        "code_translator_tool", "python_compiler_tool",
+                        "compilation_fixer_tool", "quality_analyzer_tool", "quality_improvement_tool", "file_processor_tool"
+                    ]
+                    
+                    for tool_name in tool_names:
+                        if tool_name in orchestrator_reasoning:
+                            tools_used.append(tool_name)
             
             # Create processing output based on orchestrator results
             # Add debug logging to understand response format changes
@@ -518,7 +610,11 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
             
             processing_time = time.time() - start_time
             
-            logger.info(f"Intelligent orchestration completed in {processing_time:.2f}s using tools: {tools_used}")
+            logger.info("=" * 80)
+            logger.info(f"[ORCHESTRATION] Intelligent orchestration completed successfully")
+            logger.info(f"[ORCHESTRATION] Total processing time: {processing_time:.2f} seconds")
+            logger.info(f"[ORCHESTRATION] Tools used: {', '.join(tools_used) if tools_used else 'None detected'}")
+            logger.info("=" * 80)
             
             return OrchestrationResult(
                 success=True,
@@ -531,7 +627,11 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
         except Exception as e:
             processing_time = time.time() - start_time
             error_msg = f"Intelligent orchestration failed: {str(e)}"
-            logger.error(error_msg)
+            logger.error("=" * 80)
+            logger.error(f"[ORCHESTRATION] {error_msg}")
+            logger.error(f"[ORCHESTRATION] Failed after {processing_time:.2f} seconds")
+            logger.error(f"[ORCHESTRATION] Tools attempted: {', '.join(tools_used) if tools_used else 'None'}")
+            logger.error("=" * 80)
             
             # Create a minimal processing output for error case
             processing_output = ProcessingOutput(
@@ -554,12 +654,13 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
         """
         Extract ProcessingOutput from the orchestrator's response.
         
-        This is a simplified extraction - in a production system you might want
-        more structured output from the orchestrator.
+        This extracts:
+        - Translated Python code
+        - Compilation results
         """
         import re
         
-        # Look for translated code in the response with improved extraction
+        # Extract translated Python code
         translated_code = None
         
         # First, look for the structured "FINAL TRANSLATED CODE" section
@@ -602,6 +703,13 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
                     # Get the longest code block (likely the most complete)
                     code_block = max(python_blocks, key=len).strip()
                     if code_block and len(code_block) > 10:  # Ensure it's substantial code
+                        # Decode escape sequences if present (e.g., \n -> actual newline)
+                        if '\\n' in code_block or '\\t' in code_block:
+                            try:
+                                code_block = code_block.encode().decode('unicode_escape')
+                                logger.info("Decoded escape sequences in extracted code")
+                            except Exception as e:
+                                logger.warning(f"Could not decode escape sequences: {e}")
                         translated_code = code_block
                         logger.info(f"Extracted Python code block using pattern: {pattern[:50]}... ({len(code_block)} chars)")
                         break
@@ -625,6 +733,13 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
                 if matches:
                     code_block = max(matches, key=len).strip()
                     if code_block and ("def " in code_block or "import " in code_block or "print(" in code_block):
+                        # Decode escape sequences if present
+                        if '\\n' in code_block or '\\t' in code_block:
+                            try:
+                                code_block = code_block.encode().decode('unicode_escape')
+                                logger.info("Decoded escape sequences in alternative extraction")
+                            except Exception as e:
+                                logger.warning(f"Could not decode escape sequences: {e}")
                         translated_code = code_block
                         logger.info(f"Extracted Python code via alternative pattern: {pattern[:50]}... ({len(code_block)} chars)")
                         break
@@ -669,8 +784,9 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
                 if not translated_code:
                     logger.warning("No Python code could be extracted from orchestrator response")
         
-        # Determine if processing was successful
-        processing_success = "failed" not in orchestrator_response.lower() and "error" not in orchestrator_response.lower()
+        # Determine if processing was successful based on actual outcomes
+        # Success means: code was generated AND (no compilation attempted OR compilation succeeded)
+        processing_success = False  # Default to False, will be set based on actual results
         
         # Extract compilation result with improved parsing
         compilation_result = None
@@ -782,7 +898,7 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
         # Initialize output files list - this will be populated by the S3 handler
         output_files = []
         
-        # Create processing metadata with orchestrator information
+        # Create simple processing metadata
         processing_metadata = {
             'orchestrator_used': True,
             'tools_detected': [],
@@ -798,64 +914,16 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
         else:
             logger.warning("Code extraction: No translated code found in orchestrator response")
         
-        # Detect which tools were used based on response content with improved patterns
+        # Simple tool detection - just check if tool names appear in response
         tool_indicators = {
-            'language_detector_tool': (
-                'language_detector_tool' in orchestrator_response or 
-                'Tool #2: language_detector_tool' in orchestrator_response or
-                'detected programming language' in orchestrator_response.lower() or
-                'detect.*language' in orchestrator_response.lower() or
-                'language.*detected' in orchestrator_response.lower() or
-                'javascript' in orchestrator_response.lower() or
-                'java' in orchestrator_response.lower() or
-                'c++' in orchestrator_response.lower()
-            ),
-            'code_translator_tool': (
-                'code_translator_tool' in orchestrator_response or 
-                'Tool #3: code_translator_tool' in orchestrator_response or
-                'translation successful' in orchestrator_response.lower() or
-                'translate.*code' in orchestrator_response.lower() or
-                'translated.*python' in orchestrator_response.lower() or
-                'converting.*python' in orchestrator_response.lower() or
-                'FINAL TRANSLATED CODE:' in orchestrator_response
-            ),
-            'python_compiler_tool': (
-                'python_compiler_tool' in orchestrator_response or 
-                'Tool #4: python_compiler_tool' in orchestrator_response or
-                'compilation successful' in orchestrator_response.lower() or
-                'compile.*python' in orchestrator_response.lower() or
-                'Success: True' in orchestrator_response or
-                'compiled successfully' in orchestrator_response.lower() or
-                'validation.*successful' in orchestrator_response.lower()
-            ),
-            'compilation_fixer_tool': (
-                'compilation_fixer_tool' in orchestrator_response or 
-                'compilation errors fixed' in orchestrator_response.lower() or
-                'partially fixed code' in orchestrator_response.lower() or
-                'could not identify any fixable errors' in orchestrator_response.lower() or
-                'provided a partially fixed code version' in orchestrator_response.lower()
-            ),
-            'quality_analyzer_tool': (
-                'quality_analyzer_tool' in orchestrator_response or 
-                'Tool #5: quality_analyzer_tool' in orchestrator_response or
-                'quality analysis' in orchestrator_response.lower() or
-                'analyze.*quality' in orchestrator_response.lower() or
-                'code quality' in orchestrator_response.lower()
-            ),
-            'quality_improvement_tool': (
-                'quality_improvement_tool' in orchestrator_response or 
-                'Tool #6: quality_improvement_tool' in orchestrator_response or
-                'quality improvement' in orchestrator_response.lower() or
-                'improve.*quality' in orchestrator_response.lower() or
-                'apply.*recommendations' in orchestrator_response.lower() or
-                'improved code' in orchestrator_response.lower()
-            ),
-            'file_processor_tool': (
-                'file_processor_tool' in orchestrator_response or 
-                'Tool #7: file_processor_tool' in orchestrator_response or
-                'file analysis' in orchestrator_response.lower() or
-                'process.*file' in orchestrator_response.lower()
-            )
+            'design_specification_tool': 'design_specification_tool' in orchestrator_response,
+            'implementation_from_design_tool': 'implementation_from_design_tool' in orchestrator_response,
+            'code_translator_tool': 'code_translator_tool' in orchestrator_response,
+            'python_compiler_tool': 'python_compiler_tool' in orchestrator_response,
+            'compilation_fixer_tool': 'compilation_fixer_tool' in orchestrator_response,
+            'quality_analyzer_tool': 'quality_analyzer_tool' in orchestrator_response,
+            'quality_improvement_tool': 'quality_improvement_tool' in orchestrator_response,
+            'file_processor_tool': 'file_processor_tool' in orchestrator_response
         }
         
         processing_metadata['tools_detected'] = [tool for tool, detected in tool_indicators.items() if detected]
@@ -870,6 +938,29 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
             logger.warning(f"No translated code extracted, using original code ({len(original_code)} chars)")
             # Add debugging info to metadata
             processing_metadata['extraction_failure_reason'] = 'No Python code blocks found in orchestrator response'
+        
+        # Determine processing success based on actual workflow outcomes
+        # Success criteria:
+        # 1. Code was successfully generated (translated_code exists and differs from original)
+        # 2. If compilation was attempted, it must have succeeded
+        # 3. OR if no compilation was attempted but code was generated, that's also success
+        code_generated = bool(translated_code and translated_code != original_code)
+        compilation_ok = (not compilation_result) or (compilation_result and compilation_result.compilation_success)
+        
+        processing_success = code_generated and compilation_ok
+        
+        # Log simple workflow summary
+        logger.info("=" * 80)
+        logger.info("[WORKFLOW SUMMARY]")
+        logger.info(f"  Python code generated: {code_generated}")
+        if translated_code and translated_code != original_code:
+            logger.info(f"  Python code size: {len(translated_code)} characters")
+        logger.info(f"  Compilation attempted: {bool(compilation_result)}")
+        if compilation_result:
+            logger.info(f"  Compilation successful: {compilation_result.compilation_success}")
+        logger.info(f"  Tools detected: {', '.join(processing_metadata['tools_detected'])}")
+        logger.info(f"  Processing successful: {processing_success}")
+        logger.info("=" * 80)
         
         return ProcessingOutput(
             original_analysis=orchestrator_response,

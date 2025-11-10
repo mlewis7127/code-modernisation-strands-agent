@@ -208,6 +208,72 @@ class CompilationResult:
 
 
 @dataclass
+class DesignSpecificationResult:
+    """
+    Result from design specification generation.
+    """
+    success: bool
+    design_document: str
+    source_language: str
+    analysis_time: float
+    error_message: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            'success': self.success,
+            'design_document': self.design_document,
+            'source_language': self.source_language,
+            'analysis_time': self.analysis_time,
+            'error_message': self.error_message
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'DesignSpecificationResult':
+        """Create instance from dictionary."""
+        return cls(
+            success=data['success'],
+            design_document=data['design_document'],
+            source_language=data['source_language'],
+            analysis_time=data['analysis_time'],
+            error_message=data.get('error_message')
+        )
+
+
+@dataclass
+class ImplementationResult:
+    """
+    Result from implementation generation.
+    """
+    success: bool
+    python_code: str
+    implementation_time: float
+    design_document: str
+    error_message: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            'success': self.success,
+            'python_code': self.python_code,
+            'implementation_time': self.implementation_time,
+            'design_document': self.design_document,
+            'error_message': self.error_message
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ImplementationResult':
+        """Create instance from dictionary."""
+        return cls(
+            success=data['success'],
+            python_code=data['python_code'],
+            implementation_time=data['implementation_time'],
+            design_document=data['design_document'],
+            error_message=data.get('error_message')
+        )
+
+
+@dataclass
 class ProcessingOutput:
     """
     Represents the complete output of the translation and compilation process.
@@ -241,7 +307,7 @@ class ProcessingOutput:
             'output_files': self.output_files,
             'processing_success': self.processing_success,
             'processing_time': self.processing_time,
-            'error_message': self.error_message
+            'error_message': self.error_message,
         }
     
     @classmethod
@@ -258,5 +324,5 @@ class ProcessingOutput:
             output_files=data.get('output_files', []),
             processing_success=data.get('processing_success', True),
             processing_time=data.get('processing_time', 0.0),
-            error_message=data.get('error_message')
+            error_message=data.get('error_message'),
         )
