@@ -517,93 +517,24 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
             response = self.orchestrator(context)
             orchestration_time = time.time() - orchestration_start
             
-            # Extract the actual response content
-            # The Strands Agent response object has different attributes we need to check
-            logger.info(f"[ORCHESTRATION] Response type: {type(response).__name__}")
-            logger.info(f"[ORCHESTRATION] Response attributes: {[attr for attr in dir(response) if not attr.startswith('_')]}")
-            
-            # Try to get the full conversation/history including tool calls
-            orchestrator_reasoning = None
-            
-            # Check for conversation history or messages
-            # AgentResult.state contains the full conversation including tool calls
-            if hasattr(response, 'state') and response.state:
-                logger.info(f"[ORCHESTRATION] Found 'state' attribute")
-                logger.info(f"[ORCHESTRATION] State type: {type(response.state).__name__}")
-                logger.info(f"[ORCHESTRATION] State attributes: {[attr for attr in dir(response.state) if not attr.startswith('_')][:10]}")
-                
-                # The state contains messages list with the full conversation
-                if hasattr(response.state, 'messages') and response.state.messages:
-                    logger.info(f"[ORCHESTRATION] Found {len(response.state.messages)} messages in state")
-                    # Combine all messages to get the full conversation including tool calls
-                    orchestrator_reasoning = "\n\n".join([str(msg) for msg in response.state.messages])
-                    logger.info(f"[ORCHESTRATION] Combined messages length: {len(orchestrator_reasoning)} chars")
-                else:
-                    logger.warning(f"[ORCHESTRATION] State exists but no messages found, using str(state)")
-                    orchestrator_reasoning = str(response.state)
-            elif hasattr(response, 'message'):
-                logger.info(f"[ORCHESTRATION] Found 'message' attribute (final response only)")
-                orchestrator_reasoning = str(response.message)
-            elif hasattr(response, 'messages'):
-                logger.info(f"[ORCHESTRATION] Found 'messages' attribute with {len(response.messages)} messages")
-                # Combine all messages into the reasoning
-                orchestrator_reasoning = "\n\n".join([str(msg) for msg in response.messages])
-            elif hasattr(response, 'history'):
-                logger.info(f"[ORCHESTRATION] Found 'history' attribute")
-                orchestrator_reasoning = str(response.history)
-            elif hasattr(response, 'conversation'):
-                logger.info(f"[ORCHESTRATION] Found 'conversation' attribute")
-                orchestrator_reasoning = str(response.conversation)
-            elif hasattr(response, 'content'):
-                logger.info(f"[ORCHESTRATION] Using 'content' attribute")
-                orchestrator_reasoning = response.content
-            elif hasattr(response, 'text'):
-                logger.info(f"[ORCHESTRATION] Using 'text' attribute")
-                orchestrator_reasoning = response.text
-            elif hasattr(response, 'output'):
-                logger.info(f"[ORCHESTRATION] Using 'output' attribute")
-                orchestrator_reasoning = response.output
-            else:
-                logger.warning(f"[ORCHESTRATION] No known attribute found, using str(response)")
-                orchestrator_reasoning = str(response)
+            # Extract response from Strands Agent (SDK v0.1.0 API)
+            # AgentResult.state.messages contains the full conversation including tool calls
+            orchestrator_reasoning = "\n\n".join([str(msg) for msg in response.state.messages])
             
             logger.info(f"[ORCHESTRATION] Orchestrator completed in {orchestration_time:.2f} seconds")
             logger.info(f"[ORCHESTRATION] Response length: {len(orchestrator_reasoning)} characters")
             
-            # Extract information about tools used
-            # First, check if the agent listed tools in the response
+            # Extract tools used from agent response
+            # The agent is instructed to list tools in format: "Tools used: tool1, tool2, tool3"
             tools_used_match = re.search(r'Tools used:\s*([^\n]+)', orchestrator_reasoning, re.IGNORECASE)
             if tools_used_match:
-                tools_list = tools_used_match.group(1)
-                logger.info(f"[ORCHESTRATION] Found tools list in response: {tools_list}")
-                # Parse the comma-separated tool names
-                tools_used = [tool.strip() for tool in tools_list.split(',') if tool.strip()]
+                tools_used = [tool.strip() for tool in tools_used_match.group(1).split(',') if tool.strip()]
+                logger.info(f"[ORCHESTRATION] Tools used: {', '.join(tools_used)}")
             else:
-                # Fallback: Check if the agent response has tool call information
-                if hasattr(response, 'tool_calls') and response.tool_calls:
-                    logger.info(f"[ORCHESTRATION] Found {len(response.tool_calls)} tool calls in response object")
-                    for tool_call in response.tool_calls:
-                        tool_name = tool_call.get('name') if isinstance(tool_call, dict) else getattr(tool_call, 'name', None)
-                        if tool_name:
-                            tools_used.append(tool_name)
-                else:
-                    # Last resort: search for tool names in the response text
-                    logger.warning("[ORCHESTRATION] No tools list found, searching response text for tool names")
-                    tool_names = [
-                        "design_specification_tool", "implementation_from_design_tool",
-                        "code_translator_tool", "python_compiler_tool",
-                        "compilation_fixer_tool", "quality_analyzer_tool", "quality_improvement_tool", "file_processor_tool"
-                    ]
-                    
-                    for tool_name in tool_names:
-                        if tool_name in orchestrator_reasoning:
-                            tools_used.append(tool_name)
+                logger.warning("[ORCHESTRATION] No tools list found in response")
+                tools_used = []
             
             # Create processing output based on orchestrator results
-            # Add debug logging to understand response format changes
-            logger.info(f"Orchestrator response length: {len(orchestrator_reasoning)} chars")
-            logger.debug(f"Orchestrator response preview: {orchestrator_reasoning[:500]}...")
-            
             processing_output = self._extract_processing_output(orchestrator_reasoning, code_content)
             
             processing_time = time.time() - start_time
