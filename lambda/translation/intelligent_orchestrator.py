@@ -353,7 +353,6 @@ class IntelligentTranslationOrchestrator:
     
     def __init__(self, 
                  model_id: str = "anthropic.claude-3-sonnet-20240229-v1:0",
-                 quality_model_id: str = "anthropic.claude-3-sonnet-20240229-v1:0",
                  region_name: str = "us-east-1"):
         """
         Initialize the intelligent orchestrator.
@@ -363,7 +362,6 @@ class IntelligentTranslationOrchestrator:
             region_name: AWS region for Bedrock services
         """
         self.model_id = model_id
-        self.quality_model_id = quality_model_id
         self.region_name = region_name
         
         # Create the orchestrator agent with all specialist tools

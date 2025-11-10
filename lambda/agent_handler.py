@@ -220,26 +220,24 @@ def process_s3_event(event: Dict[str, Any], context, start_time: float) -> Dict[
             
             logger.info(f"[{request_id}] Starting translation workflow for {detected_language} code")
             
+            # Prepare file info for translation
+            file_info = {
+                'file_path': object_key,
+                'key': object_key,
+                'bucket': bucket_name,
+                'size': actual_file_size,
+                'etag': etag,
+                'timestamp': timestamp,
+                'detected_language': detected_language
+            }
+            
             try:
+
                 # Initialize IntelligentTranslationOrchestrator for translation workflow
-                orchestrator = IntelligentTranslationOrchestrator(
-                    model_id="anthropic.claude-3-sonnet-20240229-v1:0",
-                    quality_model_id="anthropic.claude-3-sonnet-20240229-v1:0",
-                    region_name="us-east-1"
-                )
+                # Uses default Claude 3 Sonnet model and us-east-1 region
+                orchestrator = IntelligentTranslationOrchestrator()
                 
-                # Prepare file info for translation
-                file_info = {
-                    'file_path': object_key,
-                    'key': object_key,
-                    'bucket': bucket_name,
-                    'size': actual_file_size,
-                    'etag': etag,
-                    'timestamp': timestamp,
-                    'detected_language': detected_language
-                }
-                
-                # Run intelligent translation workflow with timeout and error handling
+                # Run code modernisation workflow with timeout and error handling
                 try:
                     # Use asyncio to run the async translation workflow
                     loop = asyncio.new_event_loop()
@@ -253,7 +251,7 @@ def process_s3_event(event: Dict[str, Any], context, start_time: float) -> Dict[
                     )
                     
                     translation_output = orchestration_result.processing_output
-                    
+
                     loop.close()
                     
                     if translation_output.processing_success:
@@ -262,60 +260,25 @@ def process_s3_event(event: Dict[str, Any], context, start_time: float) -> Dict[
                         translation_error = translation_output.error_message or "Translation failed without specific error message"
                         translation_error_type = "TRANSLATION_PROCESSING_ERROR"
                         logger.warning(f"[{request_id}] Translation workflow completed with errors: {translation_error}")
-                        
-                except asyncio.TimeoutError:
-                    translation_error = f"Translation workflow timed out after 180 seconds"
-                    translation_error_type = "TRANSLATION_TIMEOUT"
-                    logger.error(f"[{request_id}] {translation_error}")
+   
+                except Exception as e:
+                    translation_error = f"Translation workflow failed: {str(e)}"
+                    translation_error_type = "TRANSLATION_ERROR"
+                    logger.error(f"[{request_id}] {translation_error}", exc_info=True)
                     
-                except ImportError as import_exc:
-                    translation_error = f"Missing translation dependencies: {str(import_exc)}"
-                    translation_error_type = "TRANSLATION_DEPENDENCY_ERROR"
-                    logger.error(f"[{request_id}] {translation_error}")
-                    
-                except Exception as translation_exc:
-                    # Handle Bedrock AgentCore client errors specifically
-                    error_str = str(translation_exc)
-                    if "bedrock" in error_str.lower() or "agentcore" in error_str.lower():
-                        translation_error = f"Bedrock AgentCore client error: {error_str}"
-                        translation_error_type = "BEDROCK_CLIENT_ERROR"
-                    elif "timeout" in error_str.lower():
-                        translation_error = f"Translation operation timed out: {error_str}"
-                        translation_error_type = "TRANSLATION_TIMEOUT"
-                    elif "memory" in error_str.lower() or "resource" in error_str.lower():
-                        translation_error = f"Resource limitation during translation: {error_str}"
-                        translation_error_type = "RESOURCE_ERROR"
-                    else:
-                        translation_error = f"Translation workflow execution failed: {error_str}"
-                        translation_error_type = "TRANSLATION_EXECUTION_ERROR"
-                    
-                    logger.error(f"[{request_id}] {translation_error}")
-                    
-            except Exception as init_exc:
-                # Handle translation orchestrator initialization errors
-                error_str = str(init_exc)
-                if "bedrock" in error_str.lower():
-                    translation_error = f"Failed to initialize Bedrock client for translation: {error_str}"
-                    translation_error_type = "BEDROCK_INIT_ERROR"
-                elif "s3" in error_str.lower():
-                    translation_error = f"Failed to initialize S3 client for translation: {error_str}"
-                    translation_error_type = "S3_INIT_ERROR"
-                else:
-                    translation_error = f"Failed to initialize translation workflow: {error_str}"
-                    translation_error_type = "TRANSLATION_INIT_ERROR"
-                
-                logger.error(f"[{request_id}] {translation_error}")
+            except Exception as e:
+                # Handle orchestrator initialization or execution errors
+                translation_error = f"Translation workflow failed: {str(e)}"
+                translation_error_type = "TRANSLATION_ERROR"
+                logger.error(f"[{request_id}] {translation_error}", exc_info=True)
                 
         elif detected_language.lower() == 'python':
             logger.info(f"[{request_id}] File is already Python, running quality analysis and validation")
             
             try:
                 # Initialize orchestrator for Python-only processing
-                orchestrator = IntelligentTranslationOrchestrator(
-                    model_id="anthropic.claude-3-sonnet-20240229-v1:0",
-                    quality_model_id="anthropic.claude-3-sonnet-20240229-v1:0",
-                    region_name="us-east-1"
-                )
+                # Uses default Claude 3 Sonnet model and us-east-1 region
+                orchestrator = IntelligentTranslationOrchestrator()
                 
                 # Prepare file info for Python processing
                 file_info = {
