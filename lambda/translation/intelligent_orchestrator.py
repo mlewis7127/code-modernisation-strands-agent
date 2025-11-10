@@ -382,8 +382,8 @@ class IntelligentTranslationOrchestrator:
                 quality_improvement_tool,
                 file_processor_tool
             ],
-            agent_id="translation_orchestrator",
-            name="Intelligent Translation Orchestrator"
+            agent_id="modernisation_orchestrator",
+            name="Code Modernisation Orchestrator"
         )
         
         logger.info(f"Initialized IntelligentTranslationOrchestrator with Claude 3 Sonnet model {model_id}")
