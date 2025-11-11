@@ -1,37 +1,38 @@
 """
-Broken Calculator - Has multiple syntax and compilation errors
-This should trigger the compilation_fixer_tool
+Calculator with a couple of errors to test agent self-correction.
+The agent should detect these errors and fix them.
 """
 
-class Calculator
-    """Calculator with syntax errors"""
+class Calculator:
+    """Simple calculator class"""
     
     def __init__(self):
         self.result = 0
     
-    def add(self, x, y)
-        # Missing colon
+    def add(self, x, y):
         return x + y
     
     def subtract(self, x, y):
-        # Undefined variable
+        # Error 1: Using undefined variables 'a' and 'b' instead of 'x' and 'y'
         return a - b
     
     def multiply(self, x, y):
-        # Wrong indentation
-      return x * y
+        return x * y
     
     def divide(self, x, y):
-        # Missing return statement
-        result = x / y
+        if y == 0:
+            raise ValueError("Cannot divide by zero")
+        return x / y
     
     def power(self, x, y):
-        # Using undefined function
+        # Error 2: Using undefined function 'pow_function' instead of built-in 'pow'
         return pow_function(x, y)
 
-# Missing main guard
-calculator = Calculator()
-print(calculator.add(5, 3))
-print(calculator.subtract(10 4))  # Missing comma
-print(calculator.multiply(2, 3)
-print(calculator.divide(10, 2))
+
+if __name__ == "__main__":
+    calculator = Calculator()
+    print(f"5 + 3 = {calculator.add(5, 3)}")
+    print(f"10 - 4 = {calculator.subtract(10, 4)}")
+    print(f"2 * 3 = {calculator.multiply(2, 3)}")
+    print(f"10 / 2 = {calculator.divide(10, 2)}")
+    print(f"2 ^ 3 = {calculator.power(2, 3)}")
