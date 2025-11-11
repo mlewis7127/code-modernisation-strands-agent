@@ -296,52 +296,6 @@ Please provide the complete improved code that incorporates these recommendation
         return f"Quality improvement failed: {str(e)}. Original code returned unchanged:\n\n```{language}\n{code}\n```"
 
 
-@tool
-def file_processor_tool(file_info: str) -> str:
-    """
-    Process file metadata and provide insights about the file.
-    
-    Args:
-        file_info: JSON string containing file information
-        
-    Returns:
-        String with file processing insights
-    """
-    try:
-        import json
-        info = json.loads(file_info)
-        
-        file_path = info.get('file_path', 'unknown')
-        file_size = info.get('size', 0)
-        
-        # Analyze file characteristics
-        insights = []
-        
-        # File size analysis
-        if file_size > 50000:  # 50KB
-            insights.append(f"Large file ({file_size:,} bytes) - may need chunked processing")
-        elif file_size < 100:
-            insights.append(f"Very small file ({file_size} bytes) - likely a code snippet")
-        
-        # File extension insights
-        if '.' in file_path:
-            extension = file_path.split('.')[-1].lower()
-            if extension in ['py', 'pyw']:
-                insights.append("Python file detected - no translation needed")
-            elif extension in ['js', 'jsx', 'ts', 'tsx']:
-                insights.append("JavaScript/TypeScript file - good candidate for Python translation")
-            elif extension in ['java']:
-                insights.append("Java file - complex translation due to OOP patterns")
-            elif extension in ['cpp', 'c', 'cc']:
-                insights.append("C/C++ file - may need memory management translation")
-        
-        return f"File analysis for {file_path}:\n" + "\n".join(f"- {insight}" for insight in insights)
-        
-    except Exception as e:
-        logger.error(f"File processing failed: {str(e)}")
-        return f"File processing failed: {str(e)}"
-
-
 class IntelligentTranslationOrchestrator:
     """
     Intelligent orchestrator that uses the Agents-as-Tools pattern for code translation.
@@ -365,6 +319,7 @@ class IntelligentTranslationOrchestrator:
         self.region_name = region_name
         
         # Create the orchestrator agent with all specialist tools
+        # Create the orchestrator agent with all specialist tools
         self.orchestrator = Agent(
             model=BedrockModel(
                 model_id=model_id,
@@ -379,8 +334,7 @@ class IntelligentTranslationOrchestrator:
                 python_compiler_tool,
                 compilation_fixer_tool,
                 quality_analyzer_tool,
-                quality_improvement_tool,
-                file_processor_tool
+                quality_improvement_tool
             ],
             agent_id="modernisation_orchestrator",
             name="Code Modernisation Orchestrator"
@@ -402,7 +356,6 @@ AVAILABLE SPECIALIST TOOLS:
 5. compilation_fixer_tool - Automatically fixes compilation errors in Python code
 6. quality_analyzer_tool - Analyzes code quality, security, and best practices
 7. quality_improvement_tool - Applies quality recommendations to improve code
-8. file_processor_tool - Processes file metadata and provides insights
 
 DESIGN-DRIVEN TRANSLATION WORKFLOW (PREFERRED):
 For non-Python code, use this two-phase approach for higher quality translations:
@@ -440,7 +393,7 @@ INTELLIGENT DECISION MAKING:
 
 EFFICIENCY PRINCIPLES:
 - Skip unnecessary steps to save time and resources
-- Use file_processor_tool first to understand file characteristics
+- File information is provided in the user request - use it to make intelligent decisions
 - Make decisions based on what you discover, not predetermined workflows
 - If user has specific requests, prioritize those over default processing
 - If design-driven approach fails, fall back to direct translation rather than failing completely
@@ -517,9 +470,9 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
             response = self.orchestrator(context)
             orchestration_time = time.time() - orchestration_start
             
-            # Extract response from Strands Agent (SDK v0.1.0 API)
-            # AgentResult.state.messages contains the full conversation including tool calls
-            orchestrator_reasoning = "\n\n".join([str(msg) for msg in response.state.messages])
+            # Extract response from Strands Agent (SDK v1.15.0 API)
+            # In v1.15.0, the full response is in response.message
+            orchestrator_reasoning = str(response.message)
             
             logger.info(f"[ORCHESTRATION] Orchestrator completed in {orchestration_time:.2f} seconds")
             logger.info(f"[ORCHESTRATION] Response length: {len(orchestrator_reasoning)} characters")

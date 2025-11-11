@@ -1,6 +1,6 @@
-# Strands Agents SDK and tools (pinned for API stability)
-strands-agents==0.1.0
-strands-agents-tools[agent-core-code-interpreter]==0.1.0
+# Strands Agents SDK and tools (pinned to latest stable versions)
+strands-agents==1.15.0
+strands-agents-tools[agent-core-code-interpreter]==0.2.14
 
 # AWS SDK for Python
 boto3>=1.34.0
