@@ -380,7 +380,18 @@ This is essential for code extraction. Always include this section when:
 - Python code is generated from translation
 - Python code is improved by quality_improvement_tool
 - Python code is regenerated to fix compilation errors
-Even if tools already showed the code, include the final version in this format."""
+
+IMPORTANT: "complete Python code" means EVERYTHING that should be in the final file:
+- All class definitions
+- All function definitions
+- All imports
+- ALL test code, demo code, or example usage (including if __name__ == "__main__": blocks)
+- Any comments or documentation
+- Everything that was in the improved/translated version
+
+If quality_improvement_tool or any other tool added test code, demo code, or if __name__ == "__main__" blocks, you MUST include them in the FINAL TRANSLATED CODE section. Do not omit any part of the code that was generated or improved by the tools. The user expects to receive the exact same code that was successfully compiled and validated.
+
+Even if tools already showed the code, include the COMPLETE final version (with all parts) in this format."""
     
     async def process_code_request(self, 
                                  code_content: str, 
