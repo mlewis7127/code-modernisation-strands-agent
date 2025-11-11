@@ -213,14 +213,15 @@ def process_s3_event(event: Dict[str, Any], context, start_time: float) -> Dict[
         translation_error = None
         translation_error_type = None
         
-        # Only proceed with translation if it's a supported language and not already Python
-        if (detected_language != 'unknown' and 
-            detected_language.lower() != 'python' and 
-            language_detector.is_supported_language(detected_language)):
+        # Process any supported language (including Python) through the intelligent orchestrator
+        if detected_language != 'unknown' and language_detector.is_supported_language(detected_language):
             
-            logger.info(f"[{request_id}] Starting translation workflow for {detected_language} code")
+            is_python = detected_language.lower() == 'python'
+            workflow_type = "Python quality analysis" if is_python else "Translation workflow"
             
-            # Prepare file info for translation
+            logger.info(f"[{request_id}] Starting {workflow_type} for {detected_language} code")
+            
+            # Prepare file info for processing
             file_info = {
                 'file_path': object_key,
                 'key': object_key,
@@ -231,105 +232,48 @@ def process_s3_event(event: Dict[str, Any], context, start_time: float) -> Dict[
                 'detected_language': detected_language
             }
             
+            logger.info(f"[{request_id}] Running {workflow_type} for {detected_language} code")
+            
             try:
-
-                # Initialize IntelligentTranslationOrchestrator for translation workflow
+                # Initialize IntelligentTranslationOrchestrator
                 # Uses default Claude 3 Sonnet model and us-east-1 region
                 orchestrator = IntelligentTranslationOrchestrator()
                 
-                # Run code modernisation workflow with timeout and error handling
+                # Create user request based on detected language
+                if is_python:
+                    user_request = "This is Python code. Compile and validate it, analyze code quality, and apply any recommended improvements."
+                else:
+                    user_request = f"Process this {detected_language} code file: translate to Python if needed, compile and validate the result, fix any errors, and ensure quality."
+                
+                # Run orchestration workflow with timeout and error handling
                 try:
-                    # Use asyncio to run the async translation workflow
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
-                    
-                    # Create user request based on detected language
-                    user_request = f"Process this {detected_language} code file: translate to Python if needed, compile and validate the result, fix any errors, and ensure quality."
                     
                     orchestration_result = loop.run_until_complete(
                         orchestrator.process_code_request(file_content, file_info, user_request)
                     )
                     
                     translation_output = orchestration_result.processing_output
-
                     loop.close()
                     
                     if translation_output.processing_success:
-                        logger.info(f"[{request_id}] Translation workflow completed successfully")
+                        logger.info(f"[{request_id}] {workflow_type} completed successfully")
                     else:
-                        translation_error = translation_output.error_message or "Translation failed without specific error message"
-                        translation_error_type = "TRANSLATION_PROCESSING_ERROR"
-                        logger.warning(f"[{request_id}] Translation workflow completed with errors: {translation_error}")
+                        translation_error = translation_output.error_message or f"{workflow_type} failed without specific error message"
+                        translation_error_type = "PYTHON_QUALITY_WARNING" if is_python else "TRANSLATION_PROCESSING_ERROR"
+                        logger.warning(f"[{request_id}] {workflow_type} completed with errors: {translation_error}")
    
                 except Exception as e:
-                    translation_error = f"Translation workflow failed: {str(e)}"
-                    translation_error_type = "TRANSLATION_ERROR"
+                    translation_error = f"{workflow_type} failed: {str(e)}"
+                    translation_error_type = "PYTHON_ANALYSIS_ERROR" if is_python else "TRANSLATION_ERROR"
                     logger.error(f"[{request_id}] {translation_error}", exc_info=True)
                     
             except Exception as e:
                 # Handle orchestrator initialization or execution errors
-                translation_error = f"Translation workflow failed: {str(e)}"
-                translation_error_type = "TRANSLATION_ERROR"
+                translation_error = f"Failed to initialize {workflow_type}: {str(e)}"
+                translation_error_type = "PYTHON_INIT_ERROR" if is_python else "TRANSLATION_ERROR"
                 logger.error(f"[{request_id}] {translation_error}", exc_info=True)
-                
-        elif detected_language.lower() == 'python':
-            logger.info(f"[{request_id}] File is already Python, running quality analysis and validation")
-            
-            try:
-                # Initialize orchestrator for Python-only processing
-                # Uses default Claude 3 Sonnet model and us-east-1 region
-                orchestrator = IntelligentTranslationOrchestrator()
-                
-                # Prepare file info for Python processing
-                file_info = {
-                    'file_path': object_key,
-                    'key': object_key,
-                    'bucket': bucket_name,
-                    'size': actual_file_size,
-                    'etag': etag,
-                    'timestamp': timestamp,
-                    'detected_language': 'Python'
-                }
-                
-                # Run Python-specific workflow (compile, analyze, improve quality)
-                try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    
-                    # Request Python-specific processing (no translation needed)
-                    user_request = "This is Python code. Compile and validate it, analyze code quality, and apply any recommended improvements."
-                    
-                    orchestration_result = loop.run_until_complete(
-                        orchestrator.process_code_request(file_content, file_info, user_request)
-                    )
-                    
-                    translation_output = orchestration_result.processing_output
-                    
-                    loop.close()
-                    
-                    if translation_output.processing_success:
-                        logger.info(f"[{request_id}] Python quality analysis completed successfully")
-                    else:
-                        translation_error = translation_output.error_message or "Python quality analysis completed with warnings"
-                        translation_error_type = "PYTHON_QUALITY_WARNING"
-                        logger.warning(f"[{request_id}] Python quality analysis: {translation_error}")
-                        
-                except asyncio.TimeoutError:
-                    translation_error = f"Python quality analysis timed out after 180 seconds"
-                    translation_error_type = "PYTHON_ANALYSIS_TIMEOUT"
-                    logger.error(f"[{request_id}] {translation_error}")
-                    
-                except Exception as analysis_exc:
-                    error_str = str(analysis_exc)
-                    translation_error = f"Python quality analysis failed: {error_str}"
-                    translation_error_type = "PYTHON_ANALYSIS_ERROR"
-                    logger.error(f"[{request_id}] {translation_error}")
-                    
-            except Exception as init_exc:
-                error_str = str(init_exc)
-                translation_error = f"Failed to initialize Python quality analysis: {error_str}"
-                translation_error_type = "PYTHON_INIT_ERROR"
-                logger.error(f"[{request_id}] {translation_error}")
         elif detected_language == 'unknown':
             logger.info(f"[{request_id}] Could not detect language, skipping translation")
         else:
