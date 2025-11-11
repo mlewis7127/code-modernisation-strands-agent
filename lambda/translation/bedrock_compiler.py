@@ -114,7 +114,7 @@ class BedrockCompiler:
         
         try:
             logger.info("Starting Python code compilation with Bedrock AgentCore")
-            logger.debug(f"Code length: {len(python_code)} characters")
+            logger.info(f"Code length: {len(python_code)} characters")
             
             # Perform compilation with timeout
             compilation_result = self._execute_compilation(python_code, context)
