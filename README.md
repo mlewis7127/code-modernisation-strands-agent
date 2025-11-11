@@ -28,12 +28,10 @@ The following tools are made available to the orchestrator agent:
 - **implementation_from_design_tool** - Generates idiomatic Python from design specifications
 - **code_translator_tool** - Direct translation fallback for edge cases
 - **python_compiler_tool** - Compiles and validates Python code using Bedrock AgentCore
-- **compilation_fixer_tool** - Automatically fixes compilation errors in Python code
 - **quality_analyzer_tool** - Analyzes code quality, security, and best practices
 - **quality_improvement_tool** - Applies quality recommendations to improve code
-- **file_processor_tool** - Processes file metadata and provides insights
 
-**Note**: Language detection is handled by the Lambda handler before orchestration to avoid redundant LLM calls.
+**Note**: Language detection is handled by the Lambda handler before orchestration to avoid redundant LLM calls. The agent can self-correct compilation errors by analyzing error messages and regenerating improved code.
 
 
 ## Architecture
@@ -86,7 +84,7 @@ The following tools are made available to the orchestrator agent:
 │                                                          │
 │  3. Validation & Quality                                │
 │     ├─► python_compiler_tool                            │
-│     ├─► compilation_fixer_tool (if needed)              │
+│     │   └─► If errors: agent self-corrects & retries   │
 │     ├─► quality_analyzer_tool                           │
 │     └─► quality_improvement_tool                        │
 └────────┬────────────────────────────────────────────────┘
@@ -117,7 +115,7 @@ The following tools are made available to the orchestrator agent:
 │       ├── language_detector.py                 # Language detection (used by handler)
 │       ├── bedrock_translator.py                # Bedrock translation service
 │       ├── bedrock_compiler.py                  # Python compilation via Bedrock
-│       ├── compilation_fixer.py                 # Compilation error fixer
+│       ├── compilation_fixer.py                 # Compilation error fixer (legacy)
 │       ├── compilation_processor.py             # Compilation result processing
 │       ├── quality_assurance.py                 # Code quality analyzer
 │       ├── base_translator.py                   # Base translation interface
@@ -144,7 +142,7 @@ The following tools are made available to the orchestrator agent:
 - **Design Specification**: Generates structured design documents capturing architecture and behavior
 - **Idiomatic Python Generation**: Creates Python code following best practices and PEP 8 guidelines
 - **Code Compiler**: Compiles generated Python code using Bedrock AgentCore
-- **Code Fixer**: Automatically fixes compilation errors
+- **Intelligent Self-Correction**: Agent analyzes compilation errors and regenerates improved code
 - **Quality Analyser**: Analyzes code for quality, security and best practices
 - **Quality Improvement**: Updates generated code in line with recommendations
 - **Fallback Translation**: Direct translation available for edge cases
@@ -419,6 +417,12 @@ The Lambda function has the following AWS permissions:
 - **Removed Redundant Language Detection**: Language detection now happens once in the handler, not again in the orchestrator (saves ~2-3 seconds and 200-300 tokens per translation)
 - **Fixed Processing Success Detection**: Success is now determined by actual workflow outcomes (code generated + compilation passed) rather than naive string matching
 - **Escape Sequence Decoding**: Generated code properly decodes `\n` and `\t` escape sequences for IDE compatibility
+- **SDK Version Pinned**: Using `strands-agents==1.15.0` for stable API and simplified code (98% reduction in response extraction code)
+
+### Simplifications
+- **Removed Unused Tools**: Eliminated `file_processor_tool` (never used) and `compilation_fixer_tool` (ineffective)
+- **Agent Self-Correction**: Agent now intelligently fixes compilation errors by analyzing error messages and regenerating code
+- **Cleaner Codebase**: Reduced from 8 tools to 6 focused tools, removing ~100 lines of unused/ineffective code
 
 ### Bug Fixes
 - **False Negative Detection**: Fixed issue where successful translations were marked as failed due to words like "error" appearing in exception names (e.g., `ZeroDivisionError`)

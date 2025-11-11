@@ -142,54 +142,6 @@ Compilation time: {result.compilation_time:.3f} seconds"""
 
 
 @tool
-def compilation_fixer_tool(python_code: str, compilation_errors: str) -> str:
-    """
-    Automatically fix compilation errors in Python code.
-    
-    Args:
-        python_code: The Python code with compilation errors
-        compilation_errors: Description of the compilation errors
-        
-    Returns:
-        String with fix results and corrected code
-    """
-    try:
-        compiler = BedrockCompiler()
-        fixer = CompilationFixer(bedrock_client=None, compiler=compiler)
-        
-        # Create a compilation result with the errors
-        compilation_result = CompilationResult(
-            compilation_success=False,
-            errors=[compilation_errors],
-            warnings=[],
-            compilation_time=0.0
-        )
-        
-        fixed_result = fixer.fix_compilation_errors(python_code, compilation_result)
-        
-        if fixed_result.get("success", False):
-            return f"""Compilation errors fixed successfully!
-
-Fixed Python code:
-```python
-{fixed_result.get('fixed_code', python_code)}
-```
-
-Fix summary: {fixed_result.get('message', 'Errors resolved')}
-Fixes applied: {fixed_result.get('fix_attempts', 0)}"""
-        else:
-            return f"""Could not fix all compilation errors.
-
-Attempted fixes: {fixed_result.get('fix_attempts', 0)}
-Remaining errors: {fixed_result.get('message', 'Unknown error')}
-Partially fixed code available: {bool(fixed_result.get('fixed_code'))}"""
-            
-    except Exception as e:
-        logger.error(f"Compilation fixing failed: {str(e)}")
-        return f"Compilation fixing failed: {str(e)}"
-
-
-@tool
 def quality_analyzer_tool(code: str, language: str) -> str:
     """
     Analyze code quality, security vulnerabilities, and best practices.
@@ -332,7 +284,6 @@ class IntelligentTranslationOrchestrator:
                 implementation_from_design_tool,
                 code_translator_tool,
                 python_compiler_tool,
-                compilation_fixer_tool,
                 quality_analyzer_tool,
                 quality_improvement_tool
             ],
@@ -353,9 +304,8 @@ AVAILABLE SPECIALIST TOOLS:
 2. implementation_from_design_tool - Generates idiomatic Python code from a design specification (PREFERRED for implementation)
 3. code_translator_tool - Translates code directly between programming languages (FALLBACK - use only if design-driven approach fails)
 4. python_compiler_tool - Compiles and validates Python code using Bedrock AgentCore
-5. compilation_fixer_tool - Automatically fixes compilation errors in Python code
-6. quality_analyzer_tool - Analyzes code quality, security, and best practices
-7. quality_improvement_tool - Applies quality recommendations to improve code
+5. quality_analyzer_tool - Analyzes code quality, security, and best practices
+6. quality_improvement_tool - Applies quality recommendations to improve code
 
 DESIGN-DRIVEN TRANSLATION WORKFLOW (PREFERRED):
 For non-Python code, use this two-phase approach for higher quality translations:
@@ -407,6 +357,17 @@ If you use the design-driven approach, mention that you created a design specifi
 CRITICAL: At the start of your response, list which tools you used in this format:
 Tools used: tool_name_1, tool_name_2, tool_name_3
 
+INTELLIGENT DECISION MAKING:
+- For non-Python code: Prefer design_specification_tool → implementation_from_design_tool workflow
+- If code is already Python, skip translation unless user specifically requests conversion
+- Only compile code if translation occurred, validation is requested, or there are concerns
+- If python_compiler_tool returns errors, analyze them and regenerate corrected code
+- You can call python_compiler_tool multiple times to verify your fixes work
+- Iterate on compilation errors 2-3 times if needed - you can fix them by regenerating better code
+- Analyze quality when requested or when you identify potential issues
+- IMPORTANT: If quality_analyzer_tool provides recommendations, use quality_improvement_tool to apply them
+- Consider file size, complexity, and user intent when deciding on processing steps
+
 CRITICAL OUTPUT REQUIREMENT:
 If you translate code to Python, generate Python code, or improve existing Python code, you MUST include the final Python code in your response using this exact format:
 
@@ -418,7 +379,7 @@ FINAL TRANSLATED CODE:
 This is essential for code extraction. Always include this section when:
 - Python code is generated from translation
 - Python code is improved by quality_improvement_tool
-- Python code is fixed by compilation_fixer_tool
+- Python code is regenerated to fix compilation errors
 Even if tools already showed the code, include the final version in this format."""
     
     async def process_code_request(self, 
