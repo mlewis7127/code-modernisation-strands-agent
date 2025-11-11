@@ -271,7 +271,6 @@ class IntelligentTranslationOrchestrator:
         self.region_name = region_name
         
         # Create the orchestrator agent with all specialist tools
-        # Create the orchestrator agent with all specialist tools
         self.orchestrator = Agent(
             model=BedrockModel(
                 model_id=model_id,
