@@ -22,7 +22,6 @@ from .models import TranslationRequest, TranslationResult, CompilationResult, Pr
 from .language_detector import LanguageDetector
 from .bedrock_translator import BedrockTranslator
 from .bedrock_compiler import BedrockCompiler
-from .compilation_fixer import CompilationFixer
 from .design_specification import design_specification_tool
 from .implementation_generator import implementation_from_design_tool
 
@@ -329,7 +328,6 @@ INTELLIGENT DECISION MAKING:
   * Use python_compiler_tool to validate the code
   * Use quality_analyzer_tool to identify improvements
   * Use quality_improvement_tool to apply recommendations
-  * Use compilation_fixer_tool if validation fails
   * Skip translation tools (design_specification_tool, implementation_from_design_tool, code_translator_tool)
 - Only compile code if translation occurred, validation is requested, or there are concerns
 - Only fix compilation errors if compilation actually fails
@@ -541,8 +539,6 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
                 r'Fixed Python code:\s*```python\n(.*?)\n```',
                 r'```python\s*\n(.*?)```',
                 r'Translation.*?```python\s*\n(.*?)\n```',
-                # Handle compilation_fixer_tool output format
-                r'compilation_fixer_tool.*?```python\s*\n(.*?)```',
                 r'partially fixed code.*?```python\s*\n(.*?)```',
                 r'provided.*?```python\s*\n(.*?)```'
             ]
@@ -603,36 +599,9 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
                 # Combine all function definitions found
                 translated_code = '\n\n'.join(match.strip() for match in matches)
                 logger.info(f"Extracted Python functions without markdown ({len(translated_code)} chars)")
-            else:
-                # Try to extract Python code from compilation_fixer_tool output even if not in code blocks
-                if "compilation_fixer_tool" in orchestrator_response and "def " in orchestrator_response:
-                    # Look for Python code patterns in the response
-                    lines = orchestrator_response.split('\n')
-                    python_lines = []
-                    in_python_code = False
-                    
-                    for line in lines:
-                        # Start collecting when we see Python code indicators
-                        if any(indicator in line for indicator in ['def ', 'import ', 'print(', 'if __name__']):
-                            in_python_code = True
-                        
-                        # Collect Python-looking lines
-                        if in_python_code and (line.strip().startswith(('def ', 'import ', 'from ', 'print(', 'if ', 'for ', 'while ', 'return ', '#', '"""')) or 
-                                             line.strip() == '' or 
-                                             '=' in line or 
-                                             line.strip().endswith(':')):
-                            python_lines.append(line.strip())
-                        
-                        # Stop collecting if we hit non-Python content
-                        elif in_python_code and line.strip() and not any(char in line for char in ['def', 'import', 'print', '=', ':', '#']):
-                            break
-                    
-                    if python_lines:
-                        translated_code = '\n'.join(python_lines)
-                        logger.info(f"Extracted Python code from compilation_fixer_tool output ({len(translated_code)} chars)")
-                
-                if not translated_code:
-                    logger.warning("No Python code could be extracted from orchestrator response")
+            
+            if not translated_code:
+                logger.warning("No Python code could be extracted from orchestrator response")
         
         # Determine if processing was successful based on actual outcomes
         # Success means: code was generated AND (no compilation attempted OR compilation succeeded)
@@ -641,10 +610,9 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
         # Extract compilation result with improved parsing
         compilation_result = None
         
-        # Look for compilation tool results (including compilation_fixer_tool)
+        # Look for compilation tool results
         # Enhanced detection to handle quality improvement workflow
         if ("python_compiler_tool" in orchestrator_response or 
-            "compilation_fixer_tool" in orchestrator_response or 
             "compilation" in orchestrator_response.lower() or
             "Success: True" in orchestrator_response or
             "compiled successfully" in orchestrator_response.lower() or
@@ -691,22 +659,6 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
                     if time_match:
                         compilation_time = float(time_match.group(1))
                         break
-            
-            # Handle compilation_fixer_tool results
-            elif "compilation_fixer_tool" in orchestrator_response:
-                if "could not identify any fixable errors" in orchestrator_response.lower():
-                    # Compilation fixer was used but couldn't fix errors
-                    compilation_success = False
-                    errors = ["Compilation fixer could not identify fixable errors"]
-                elif "partially fixed code" in orchestrator_response.lower():
-                    # Compilation fixer provided a partial fix
-                    compilation_success = True  # Consider it successful since code was provided
-                    execution_result = "Code partially fixed by compilation_fixer_tool"
-                    warnings = ["Code was partially fixed - may need manual review"]
-                else:
-                    # General compilation fixer usage
-                    compilation_success = True
-                    execution_result = "Code processed by compilation_fixer_tool"
             
             # Look for compilation errors
             elif "compilation failed" in orchestrator_response.lower() or "compilation errors" in orchestrator_response.lower():
@@ -770,7 +722,6 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
             'implementation_from_design_tool': 'implementation_from_design_tool' in orchestrator_response,
             'code_translator_tool': 'code_translator_tool' in orchestrator_response,
             'python_compiler_tool': 'python_compiler_tool' in orchestrator_response,
-            'compilation_fixer_tool': 'compilation_fixer_tool' in orchestrator_response,
             'quality_analyzer_tool': 'quality_analyzer_tool' in orchestrator_response,
             'quality_improvement_tool': 'quality_improvement_tool' in orchestrator_response,
             'file_processor_tool': 'file_processor_tool' in orchestrator_response
