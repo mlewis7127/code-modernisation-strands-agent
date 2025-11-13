@@ -18,12 +18,11 @@ from datetime import datetime
 from strands import Agent, tool
 from strands.models import BedrockModel
 
-from .models import TranslationRequest, TranslationResult, CompilationResult, ProcessingOutput
-from .language_detector import LanguageDetector
-from .bedrock_translator import BedrockTranslator
+from .models import CompilationResult, ProcessingOutput
 from .bedrock_compiler import BedrockCompiler
 from .design_specification import design_specification_tool
 from .implementation_generator import implementation_from_design_tool
+from .specialized_agents import quality_analysis_specialist, code_improvement_specialist
 
 logger = logging.getLogger(__name__)
 
@@ -42,53 +41,6 @@ class OrchestrationResult:
 # Specialist Agent Tools
 # Note: Language detection is handled by the agent_handler before orchestration
 # to avoid redundant LLM calls. The detected language is passed in the user request.
-
-@tool
-def code_translator_tool(source_code: str, source_language: str, target_language: str = "python", file_path: str = "code") -> str:
-    """
-    Translate code from one programming language to another.
-    
-    Args:
-        source_code: The source code to translate
-        source_language: The source programming language
-        target_language: The target programming language (default: python)
-        file_path: Original file path for context
-        
-    Returns:
-        String with translation result and translated code
-    """
-    try:
-        translator = BedrockTranslator()
-        
-        # Create translation request
-        request = TranslationRequest(
-            source_code=source_code,
-            source_language=source_language,
-            target_language=target_language,
-            file_path=file_path,
-            original_size=len(source_code)
-        )
-        
-        result = translator.translate(request)
-        
-        if result.translation_success:
-            return f"""Translation successful from {source_language} to {target_language}.
-
-Translated code:
-```{target_language}
-{result.translated_code}
-```
-
-Translation time: {result.translation_time:.2f}s
-Confidence score: {result.confidence_score:.2f}/10
-Warnings: {len(result.warnings)} warnings found"""
-        else:
-            return f"Translation failed: {result.error_message}"
-            
-    except Exception as e:
-        logger.error(f"Code translation failed: {str(e)}")
-        return f"Code translation failed: {str(e)}"
-
 
 @tool
 def python_compiler_tool(python_code: str) -> str:
@@ -145,6 +97,9 @@ def quality_analyzer_tool(code: str, language: str) -> str:
     """
     Analyze code quality, security vulnerabilities, and best practices.
     
+    Uses a specialized quality analysis agent to provide comprehensive
+    code quality assessment.
+    
     Args:
         code: The source code to analyze
         language: The programming language of the code
@@ -153,27 +108,6 @@ def quality_analyzer_tool(code: str, language: str) -> str:
         String with detailed quality analysis
     """
     try:
-        # Create a specialized code quality analysis agent
-        # Note: Using Claude 3 Sonnet for reliable quality analysis
-        quality_agent = Agent(
-            model=BedrockModel(
-                model_id="anthropic.claude-3-sonnet-20240229-v1:0",
-                temperature=0.1,
-                max_tokens=2000
-            ),
-            system_prompt=f"""You are a senior code quality specialist with expertise in {language} and software engineering best practices.
-
-Analyze the provided code for:
-1. Code quality issues (readability, maintainability, structure)
-2. Security vulnerabilities and potential exploits
-3. Performance problems and optimization opportunities
-4. Best practice violations and anti-patterns
-5. Documentation and commenting quality
-
-Provide specific, actionable recommendations with examples where helpful.
-Focus on the most important issues first."""
-        )
-        
         analysis_prompt = f"""Please analyze this {language} code for quality, security, and best practices:
 
 ```{language}
@@ -182,7 +116,7 @@ Focus on the most important issues first."""
 
 Provide a comprehensive analysis with specific recommendations for improvement."""
         
-        analysis_result = quality_agent(analysis_prompt)
+        analysis_result = quality_analysis_specialist(analysis_prompt)
         return str(analysis_result)
         
     except Exception as e:
@@ -195,6 +129,9 @@ def quality_improvement_tool(code: str, recommendations: str, language: str = "p
     """
     Apply quality recommendations to improve code based on analysis results.
     
+    Uses a specialized code improvement agent to refactor and enhance code
+    while maintaining its original functionality.
+    
     Args:
         code: The source code to improve
         recommendations: Quality analysis recommendations to apply
@@ -204,29 +141,6 @@ def quality_improvement_tool(code: str, recommendations: str, language: str = "p
         Improved code with quality recommendations applied
     """
     try:
-        # Create a specialized code improvement agent
-        # Note: Using Claude 3 Sonnet for reliable code improvements
-        improvement_agent = Agent(
-            model=BedrockModel(
-                model_id="anthropic.claude-3-sonnet-20240229-v1:0",
-                temperature=0.2,
-                max_tokens=3000
-            ),
-            system_prompt=f"""You are a senior software engineer specializing in code improvement and refactoring.
-
-Your task is to apply quality recommendations to improve code while maintaining its functionality.
-
-Guidelines:
-1. Apply the provided recommendations carefully
-2. Maintain the original functionality and behavior
-3. Improve code quality, readability, and performance
-4. Follow {language} best practices and conventions
-5. Add appropriate comments and documentation
-6. Ensure the code is production-ready
-
-Always provide the complete improved code, not just the changes."""
-        )
-        
         improvement_prompt = f"""Please improve this {language} code by applying the following quality recommendations:
 
 CURRENT CODE:
@@ -239,7 +153,7 @@ QUALITY RECOMMENDATIONS TO APPLY:
 
 Please provide the complete improved code that incorporates these recommendations while maintaining the original functionality."""
         
-        improved_result = improvement_agent(improvement_prompt)
+        improved_result = code_improvement_specialist(improvement_prompt)
         return str(improved_result)
         
     except Exception as e:
@@ -277,7 +191,6 @@ class IntelligentTranslationOrchestrator:
             tools=[
                 design_specification_tool,
                 implementation_from_design_tool,
-                code_translator_tool,
                 python_compiler_tool,
                 quality_analyzer_tool,
                 quality_improvement_tool
@@ -295,40 +208,36 @@ class IntelligentTranslationOrchestrator:
 NOTE: The source code language has already been detected by the handler and is provided in the user request. You do not need to detect the language.
 
 AVAILABLE SPECIALIST TOOLS:
-1. design_specification_tool - Analyzes source code and generates a structured design document describing functionality, architecture, and requirements (PREFERRED for non-Python code)
-2. implementation_from_design_tool - Generates idiomatic Python code from a design specification (PREFERRED for implementation)
-3. code_translator_tool - Translates code directly between programming languages (FALLBACK - use only if design-driven approach fails)
-4. python_compiler_tool - Compiles and validates Python code using Bedrock AgentCore
-5. quality_analyzer_tool - Analyzes code quality, security, and best practices
-6. quality_improvement_tool - Applies quality recommendations to improve code
+1. design_specification_tool - Analyzes source code and generates a structured design document describing functionality, architecture, and requirements
+2. implementation_from_design_tool - Generates idiomatic Python code from a design specification
+3. python_compiler_tool - Compiles and validates Python code using Bedrock AgentCore
+4. quality_analyzer_tool - Analyzes code quality, security, and best practices
+5. quality_improvement_tool - Applies quality recommendations to improve code
 
-DESIGN-DRIVEN TRANSLATION WORKFLOW (PREFERRED):
-For non-Python code, use this two-phase approach for higher quality translations:
+DESIGN-DRIVEN TRANSLATION WORKFLOW:
+For non-Python code, use this two-phase approach:
 1. First, use design_specification_tool to analyze the source code and create a design document
    - This captures the code's intent, architecture, data structures, and behavior
    - The design document provides a language-agnostic understanding of what the code does
 2. Then, use implementation_from_design_tool to generate idiomatic Python from the design
    - This produces well-structured, Pythonic code that implements the design
-   - Results in better code quality than direct syntactic translation
+   - Results in high-quality, maintainable code
 
 Benefits of design-driven approach:
 - Captures intent and architecture, not just syntax
-- Generates more idiomatic and maintainable Python code
+- Generates idiomatic and maintainable Python code
 - Better handles language-specific patterns and idioms
 - Provides design documentation as a valuable artifact
 
-FALLBACK TRANSLATION:
-- Use code_translator_tool ONLY if design_specification_tool fails or times out
-- Direct translation is faster but may produce less idiomatic Python code
-- If design-driven approach encounters errors, fall back gracefully to direct translation
+If the design-driven approach encounters errors, report them clearly so they can be investigated.
 
 INTELLIGENT DECISION MAKING:
-- For non-Python code: Prefer design_specification_tool → implementation_from_design_tool workflow
+- For non-Python code: Use design_specification_tool → implementation_from_design_tool workflow
 - For Python code: Focus on validation and quality improvement
   * Use python_compiler_tool to validate the code
   * Use quality_analyzer_tool to identify improvements
   * Use quality_improvement_tool to apply recommendations
-  * Skip translation tools (design_specification_tool, implementation_from_design_tool, code_translator_tool)
+  * Skip translation tools (design_specification_tool, implementation_from_design_tool)
 - Only compile code if translation occurred, validation is requested, or there are concerns
 - Only fix compilation errors if compilation actually fails
 - Analyze quality when requested or when you identify potential issues
@@ -340,7 +249,7 @@ EFFICIENCY PRINCIPLES:
 - File information is provided in the user request - use it to make intelligent decisions
 - Make decisions based on what you discover, not predetermined workflows
 - If user has specific requests, prioritize those over default processing
-- If design-driven approach fails, fall back to direct translation rather than failing completely
+- If design-driven approach fails, report the error clearly for investigation
 
 RESPONSE FORMAT:
 Always provide clear reasoning for your decisions and summarize what you accomplished.
@@ -720,7 +629,6 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
         tool_indicators = {
             'design_specification_tool': 'design_specification_tool' in orchestrator_response,
             'implementation_from_design_tool': 'implementation_from_design_tool' in orchestrator_response,
-            'code_translator_tool': 'code_translator_tool' in orchestrator_response,
             'python_compiler_tool': 'python_compiler_tool' in orchestrator_response,
             'quality_analyzer_tool': 'quality_analyzer_tool' in orchestrator_response,
             'quality_improvement_tool': 'quality_improvement_tool' in orchestrator_response,

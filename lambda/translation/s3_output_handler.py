@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import asdict
 
-from .models import TranslationResult, CompilationResult, ProcessingOutput
+from .models import CompilationResult, ProcessingOutput
 
 logger = logging.getLogger(__name__)
 
@@ -129,78 +129,6 @@ class S3OutputHandler:
             logger.error(f"Failed to save translation output to S3: {str(e)}")
             raise
     
-    def save_translation_result(self,
-                              bucket: str,
-                              original_key: str,
-                              translation_result: TranslationResult,
-                              request_id: str) -> str:
-        """
-        Save translation result as Python code file.
-        
-        Args:
-            bucket: S3 bucket name
-            original_key: Original file key
-            translation_result: Translation result to save
-            request_id: Request ID for tracking
-            
-        Returns:
-            str: S3 key of saved file
-        """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        python_key = self._generate_python_code_key(original_key, timestamp)
-        
-        self._save_translated_code(bucket, python_key, translation_result.translated_code,
-                                 original_key, request_id, translation_result)
-        
-        return python_key
-    
-    def save_compilation_result(self,
-                              bucket: str,
-                              original_key: str,
-                              compilation_result: CompilationResult,
-                              request_id: str) -> str:
-        """
-        Save compilation result metadata.
-        
-        Args:
-            bucket: S3 bucket name
-            original_key: Original file key
-            compilation_result: Compilation result to save
-            request_id: Request ID for tracking
-            
-        Returns:
-            str: S3 key of saved file
-        """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        if compilation_result.compilation_success:
-            metadata_key = self._generate_metadata_key(original_key, timestamp, "compilation")
-        else:
-            metadata_key = self._generate_error_key(original_key, timestamp, "compilation")
-        
-        # Prepare compilation data
-        compilation_data = {
-            'compilation_result': compilation_result.to_dict(),
-            'original_file': original_key,
-            'timestamp': timestamp,
-            'request_id': request_id
-        }
-        
-        self.s3_client.put_object(
-            Bucket=bucket,
-            Key=metadata_key,
-            Body=json.dumps(compilation_data, indent=2),
-            ContentType='application/json',
-            Metadata={
-                'source-key': original_key,
-                'request-id': request_id,
-                'content-type': 'compilation-result',
-                'timestamp': timestamp
-            }
-        )
-        
-        return metadata_key
-    
     def _generate_analysis_key(self, original_key: str, timestamp: str) -> str:
         """Generate S3 key for analysis results (backward compatibility)."""
         safe_key = original_key.replace('/', '_')
@@ -265,8 +193,7 @@ class S3OutputHandler:
                             key: str,
                             python_code: str,
                             original_key: str,
-                            request_id: str,
-                            translation_result: Optional[TranslationResult] = None) -> None:
+                            request_id: str) -> None:
         """Save translated Python code."""
         # Prepare metadata
         metadata = {
@@ -275,18 +202,6 @@ class S3OutputHandler:
             'content-type': 'translated-python-code',
             'timestamp': datetime.now().isoformat()
         }
-        
-        # Add translation-specific metadata if available
-        if translation_result:
-            metadata.update({
-                'source-language': translation_result.source_language,
-                'target-language': translation_result.target_language,
-                'translation-success': str(translation_result.translation_success),
-                'confidence-score': str(translation_result.confidence_score),
-                'translation-time': str(translation_result.translation_time),
-                'original-size': str(translation_result.original_size),
-                'translated-size': str(translation_result.translated_size)
-            })
         
         self.s3_client.put_object(
             Bucket=bucket,

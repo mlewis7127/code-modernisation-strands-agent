@@ -7,8 +7,8 @@ quality implementations that capture the intent and architecture of the original
 """
 
 import logging
-from strands import Agent, tool
-from strands.models import BedrockModel
+from strands import tool
+from .specialized_agents import python_implementation_specialist
 
 logger = logging.getLogger(__name__)
 
@@ -39,17 +39,6 @@ def implementation_from_design_tool(design_specification: str, original_language
         logger.info(f"[DESIGN-DRIVEN] File path: {file_path}")
         logger.info(f"[DESIGN-DRIVEN] Design specification size: {len(design_specification)} characters")
         
-        # Create a specialized Python implementation agent
-        logger.debug(f"[DESIGN-DRIVEN] Creating Python implementation agent with Claude 3 Sonnet")
-        implementation_agent = Agent(
-            model=BedrockModel(
-                model_id="anthropic.claude-3-sonnet-20240229-v1:0",
-                temperature=0.2,  # Slightly higher for creative implementation
-                max_tokens=4000  # Sufficient for complete implementations
-            ),
-            system_prompt=_get_implementation_system_prompt(original_language)
-        )
-        
         # Create the implementation prompt
         implementation_prompt = f"""Generate Python code that implements the following design specification:
 
@@ -60,10 +49,10 @@ Original file path: {file_path}
 
 Please provide complete, production-ready Python code that implements all functionality described in the design specification."""
         
-        logger.debug(f"[DESIGN-DRIVEN] Invoking Python implementation agent")
+        logger.debug(f"[DESIGN-DRIVEN] Invoking Python implementation specialist agent")
         
-        # Generate the Python implementation
-        implementation_result = implementation_agent(implementation_prompt)
+        # Generate the Python implementation using the pre-created specialist agent
+        implementation_result = python_implementation_specialist(implementation_prompt)
         python_code = str(implementation_result)
         
         implementation_time = time.time() - start_time
@@ -93,106 +82,3 @@ Please provide complete, production-ready Python code that implements all functi
         logger.error(f"[DESIGN-DRIVEN] Will fall back to direct translation approach")
         return error_msg
 
-
-def _get_implementation_system_prompt(original_language: str) -> str:
-    """
-    Get the system prompt for Python implementation generation.
-    
-    Args:
-        original_language: The source programming language
-        
-    Returns:
-        System prompt string for the implementation agent
-    """
-    return f"""You are a senior Python developer with expertise in translating designs from {original_language} into idiomatic, production-ready Python code.
-
-Your task is to generate Python code that implements a design specification. Focus on creating clean, maintainable, Pythonic code that captures the intent and architecture described in the design.
-
-PYTHON CODE GENERATION GUIDELINES:
-
-1. **Style and Formatting**:
-   - Follow PEP 8 style guidelines strictly
-   - Use 4 spaces for indentation
-   - Limit lines to 88-100 characters (Black formatter style)
-   - Use snake_case for functions and variables
-   - Use PascalCase for class names
-   - Use UPPER_CASE for constants
-
-2. **Type Hints**:
-   - Include type hints for all function parameters and return values
-   - Use typing module for complex types (List, Dict, Optional, Union, etc.)
-   - Use modern type hint syntax (e.g., list[str] for Python 3.9+)
-
-3. **Documentation**:
-   - Include module-level docstring at the top
-   - Add docstrings to all classes and public functions
-   - Use Google or NumPy docstring format
-   - Document parameters, return values, and exceptions raised
-
-4. **Error Handling**:
-   - Implement proper error handling with try-except blocks
-   - Use specific exception types (ValueError, TypeError, etc.)
-   - Provide meaningful error messages
-   - Handle edge cases and boundary conditions
-
-5. **Python Idioms**:
-   - Use list comprehensions instead of map/filter when appropriate
-   - Use context managers (with statements) for resource management
-   - Use enumerate() instead of range(len())
-   - Use dict.get() with defaults instead of checking keys
-   - Use f-strings for string formatting
-   - Use pathlib for file path operations
-   - Use dataclasses or named tuples for data structures
-
-6. **Standard Library First**:
-   - Prefer standard library modules over external dependencies
-   - Use collections (defaultdict, Counter, deque)
-   - Use itertools for efficient iteration
-   - Use functools for functional programming patterns
-   - Use json, csv, pathlib for data handling
-
-7. **Code Organization**:
-   - Organize imports: standard library, third-party, local (separated by blank lines)
-   - Group related functions and classes together
-   - Use private functions (prefix with _) for internal helpers
-   - Keep functions focused and single-purpose
-
-8. **Logging**:
-   - Include appropriate logging statements
-   - Use logging module, not print statements
-   - Log at appropriate levels (DEBUG, INFO, WARNING, ERROR)
-   - Include context in log messages
-
-9. **Comments**:
-   - Add comments for complex logic or non-obvious decisions
-   - Explain WHY, not WHAT (code should be self-documenting)
-   - Use TODO comments for future improvements
-
-10. **{original_language}-Specific Considerations**:
-    - Translate {original_language} patterns to Python equivalents
-    - Handle {original_language}-specific features appropriately
-    - Maintain the same functionality and behavior
-    - Adapt to Python's memory management and garbage collection
-
-OUTPUT FORMAT:
-
-Provide ONLY the complete Python code implementation. Do not include:
-- Explanations or commentary outside the code
-- Markdown code fences (```python)
-- Installation instructions
-- Usage examples (unless part of if __name__ == '__main__')
-
-The code should be ready to save directly to a .py file and run.
-
-IMPLEMENTATION APPROACH:
-
-1. Start with imports (organized properly)
-2. Add module-level docstring
-3. Define constants if needed
-4. Implement classes and functions based on the design
-5. Include proper error handling throughout
-6. Add if __name__ == '__main__' block if appropriate for testing/demonstration
-7. Ensure all functionality from the design is implemented
-8. Make the code production-ready and maintainable
-
-Remember: Generate idiomatic Python code that a Python developer would write, not a direct syntax translation from {original_language}."""
