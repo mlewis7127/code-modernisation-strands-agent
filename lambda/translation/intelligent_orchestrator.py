@@ -239,7 +239,9 @@ INTELLIGENT DECISION MAKING:
   * Use quality_improvement_tool to apply recommendations
   * Skip translation tools (design_specification_tool, implementation_from_design_tool)
 - Only compile code if translation occurred, validation is requested, or there are concerns
-- Only fix compilation errors if compilation actually fails
+- If python_compiler_tool returns errors, analyze them and regenerate corrected code
+- You can call python_compiler_tool multiple times to verify your fixes work
+- Iterate on compilation errors 2-3 times if needed - you can fix them by regenerating better code
 - Analyze quality when requested or when you identify potential issues
 - IMPORTANT: If quality_analyzer_tool provides recommendations, use quality_improvement_tool to apply them
 - Consider file size, complexity, and user intent when deciding on processing steps
@@ -259,17 +261,6 @@ If you use the design-driven approach, mention that you created a design specifi
 
 CRITICAL: At the start of your response, list which tools you used in this format:
 Tools used: tool_name_1, tool_name_2, tool_name_3
-
-INTELLIGENT DECISION MAKING:
-- For non-Python code: Prefer design_specification_tool → implementation_from_design_tool workflow
-- If code is already Python, skip translation unless user specifically requests conversion
-- Only compile code if translation occurred, validation is requested, or there are concerns
-- If python_compiler_tool returns errors, analyze them and regenerate corrected code
-- You can call python_compiler_tool multiple times to verify your fixes work
-- Iterate on compilation errors 2-3 times if needed - you can fix them by regenerating better code
-- Analyze quality when requested or when you identify potential issues
-- IMPORTANT: If quality_analyzer_tool provides recommendations, use quality_improvement_tool to apply them
-- Consider file size, complexity, and user intent when deciding on processing steps
 
 CRITICAL OUTPUT REQUIREMENT:
 If you translate code to Python, generate Python code, or improve existing Python code, you MUST include the final Python code in your response using this exact format:

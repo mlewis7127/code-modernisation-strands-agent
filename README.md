@@ -230,12 +230,11 @@ npx cdk deploy --require-approval never
 The application uses **Claude 3 Sonnet** for all tasks:
 
 - **Orchestrator Agent**: Workflow decisions and tool coordination
-- **Design Specification**: Analyzing code architecture and intent
-- **Implementation Generator**: Creating idiomatic Python from designs
-- **Code Translator**: Cross-language translation accuracy (fallback)
-- **Compilation Fixer**: Understanding and fixing Python errors
-- **Quality Analyzer**: Code quality, security, and best practices analysis
-- **Quality Improver**: Applying recommendations to enhance code
+- **Design Analysis Specialist**: Analyzing code architecture and intent
+- **Python Implementation Specialist**: Creating idiomatic Python from designs
+- **Quality Analysis Specialist**: Code quality, security, and best practices analysis
+- **Code Improvement Specialist**: Applying recommendations to enhance code
+- **Python Compiler Tool**: Validates Python code using Bedrock AgentCore (direct API, not an agent)
 
 This approach provides **consistent, reliable performance** with a proven, stable model.
 
