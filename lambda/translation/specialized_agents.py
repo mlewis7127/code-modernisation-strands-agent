@@ -13,55 +13,55 @@ from strands.models import BedrockModel
 logger = logging.getLogger(__name__)
 
 
-# Quality Analysis Specialist Agent
-quality_analysis_specialist = Agent(
+
+
+
+# Python Code Improvement Specialist Agent (Combined Analysis + Improvement)
+python_code_improvement_specialist = Agent(
     model=BedrockModel(
         model_id="anthropic.claude-3-sonnet-20240229-v1:0",
-        temperature=0.1,
-        max_tokens=2000
+        temperature=0.2,
+        max_tokens=4000
     ),
-    system_prompt="""You are a senior code quality specialist with expertise in multiple programming languages and software engineering best practices.
+    system_prompt="""You are a senior Python engineer specializing in code analysis and improvement.
 
-Analyze the provided code for:
-1. Code quality issues (readability, maintainability, structure)
+Your task is to analyze Python code for quality issues and automatically apply improvements in a single pass.
+
+ANALYSIS AREAS:
+1. Code quality (readability, maintainability, structure)
 2. Security vulnerabilities and potential exploits
 3. Performance problems and optimization opportunities
 4. Best practice violations and anti-patterns
 5. Documentation and commenting quality
+6. Type hints and modern Python features
+7. Error handling and edge cases
 
-Provide specific, actionable recommendations with examples where helpful.
-Focus on the most important issues first.
+IMPROVEMENT GUIDELINES:
+1. Maintain the original functionality and behavior
+2. Apply PEP 8 style guidelines
+3. Add type hints where missing
+4. Improve error handling
+5. Add docstrings for classes and functions
+6. Use Python idioms (list comprehensions, context managers, etc.)
+7. Optimize performance where applicable
+8. Add appropriate comments for complex logic
+9. Ensure the code is production-ready
 
-When analyzing code, consider the language-specific conventions and best practices.""",
-    agent_id="quality_analysis_specialist",
-    name="Code Quality Analysis Specialist"
-)
+OUTPUT FORMAT:
+Provide a brief summary of improvements made, followed by the complete improved code.
 
+Structure your response as:
+IMPROVEMENTS APPLIED:
+- List of key improvements made
 
-# Code Improvement Specialist Agent
-code_improvement_specialist = Agent(
-    model=BedrockModel(
-        model_id="anthropic.claude-3-sonnet-20240229-v1:0",
-        temperature=0.2,
-        max_tokens=3000
-    ),
-    system_prompt="""You are a senior software engineer specializing in code improvement and refactoring.
+IMPROVED CODE:
+```python
+[complete improved Python code]
+```
 
-Your task is to apply quality recommendations to improve code while maintaining its functionality.
-
-Guidelines:
-1. Apply the provided recommendations carefully
-2. Maintain the original functionality and behavior
-3. Improve code quality, readability, and performance
-4. Follow language-specific best practices and conventions
-5. Add appropriate comments and documentation
-6. Ensure the code is production-ready
-
-Always provide the complete improved code, not just the changes.
-
-When improving code, preserve all functionality including test code, demo code, and if __name__ == "__main__" blocks.""",
-    agent_id="code_improvement_specialist",
-    name="Code Improvement Specialist"
+Always provide the COMPLETE improved code, including all functionality, test code, demo code, and if __name__ == "__main__" blocks.""",
+    agent_id="python_code_improvement_specialist",
+    name="Python Code Improvement Specialist"
 )
 
 
@@ -254,4 +254,4 @@ Remember: Generate idiomatic Python code that a Python developer would write, no
 )
 
 
-logger.info("Initialized specialized agents: quality_analysis_specialist, code_improvement_specialist, design_analysis_specialist, python_implementation_specialist")
+logger.info("Initialized specialized agents: python_code_improvement_specialist, design_analysis_specialist, python_implementation_specialist")

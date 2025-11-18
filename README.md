@@ -26,12 +26,10 @@ The following tools are made available to the orchestrator agent:
 
 - **design_specification_tool** - Analyzes source code and generates structured design documents
 - **implementation_from_design_tool** - Generates idiomatic Python from design specifications
-- **code_translator_tool** - Direct translation fallback for edge cases
-- **python_compiler_tool** - Compiles and validates Python code using Bedrock AgentCore
-- **quality_analyzer_tool** - Analyzes code quality, security, and best practices
-- **quality_improvement_tool** - Applies quality recommendations to improve code
+- **python_compiler_tool** - Compiles and validates Python code using Bedrock AgentCore (mandatory for all workflows)
+- **improve_python_code_tool** - Analyzes and improves Python code quality in a single pass (combines analysis + improvement)
 
-**Note**: Language detection is handled by the Lambda handler before orchestration to avoid redundant LLM calls. The agent can self-correct compilation errors by analyzing error messages and regenerating improved code.
+**Note**: Language detection is handled by the Lambda handler before orchestration to avoid redundant LLM calls. The agent must always compile code before returning and will automatically fix compilation errors using the improve_python_code_tool, iterating until code compiles successfully.
 
 
 ## Architecture
@@ -72,21 +70,29 @@ The following tools are made available to the orchestrator agent:
 ┌─────────────────────────────────────────────────────────┐
 │         Intelligent Translation Orchestrator            │
 │                                                          │
-│  1. Design-Driven Translation (Preferred)               │
-│     ├─► design_specification_tool                       │
-│     │   └─► Generate design document                    │
-│     └─► implementation_from_design_tool                 │
-│         └─► Generate Python from design                 │
+│  FOR NON-PYTHON CODE:                                   │
+│  1. design_specification_tool                           │
+│     └─► Generate design document                        │
+│  2. implementation_from_design_tool                     │
+│     └─► Generate Python from design                     │
+│  3. python_compiler_tool (MANDATORY)                    │
+│     └─► Validate generated code                         │
+│  4. IF compilation fails:                               │
+│     ├─► improve_python_code_tool                        │
+│     │   └─► Fix compilation errors                      │
+│     └─► python_compiler_tool (MANDATORY)                │
+│         └─► Recompile until success (up to 3 attempts)  │
 │                                                          │
-│  2. Fallback Translation (If needed)                    │
-│     └─► code_translator_tool                            │
-│         └─► Direct translation                          │
-│                                                          │
-│  3. Validation & Quality                                │
-│     ├─► python_compiler_tool                            │
-│     │   └─► If errors: agent self-corrects & retries   │
-│     ├─► quality_analyzer_tool                           │
-│     └─► quality_improvement_tool                        │
+│  FOR PYTHON CODE:                                       │
+│  1. improve_python_code_tool                            │
+│     └─► Analyze and improve in one pass                 │
+│  2. python_compiler_tool (MANDATORY)                    │
+│     └─► Validate improved code                          │
+│  3. IF compilation fails:                               │
+│     ├─► improve_python_code_tool                        │
+│     │   └─► Fix compilation errors                      │
+│     └─► python_compiler_tool (MANDATORY)                │
+│         └─► Recompile until success (up to 3 attempts)  │
 └────────┬────────────────────────────────────────────────┘
          │
          ▼
@@ -232,8 +238,7 @@ The application uses **Claude 3 Sonnet** for all tasks:
 - **Orchestrator Agent**: Workflow decisions and tool coordination
 - **Design Analysis Specialist**: Analyzing code architecture and intent
 - **Python Implementation Specialist**: Creating idiomatic Python from designs
-- **Quality Analysis Specialist**: Code quality, security, and best practices analysis
-- **Code Improvement Specialist**: Applying recommendations to enhance code
+- **Python Code Improvement Specialist**: Combined analysis and improvement in a single pass
 - **Python Compiler Tool**: Validates Python code using Bedrock AgentCore (direct API, not an agent)
 
 This approach provides **consistent, reliable performance** with a proven, stable model.
@@ -272,20 +277,24 @@ translated/
 
 ### 🔍 Translation Workflow
 
-The agent automatically determines the best translation approach:
+The agent follows a streamlined, mandatory compilation workflow:
 
-1. **Design-Driven (Preferred)**: For non-Python code files
+1. **For Non-Python Code**: Design-driven translation with mandatory compilation
    - Generates design specification analyzing code architecture
    - Creates idiomatic Python implementation from design
-   - Produces higher quality, more maintainable code
+   - **MUST compile** - compilation is mandatory, not optional
+   - If compilation fails, automatically fixes errors and recompiles
+   - Iterates up to 3 times until code compiles successfully
 
-2. **Direct Translation (Fallback)**: Used when design generation fails or for edge cases
-   - Faster but may produce less idiomatic Python
-   - Automatically triggered if design-driven approach encounters issues
+2. **For Python Code**: Quality improvement with mandatory compilation
+   - Analyzes and improves code in a single pass (quality, security, performance, best practices)
+   - **MUST compile** - compilation is mandatory, not optional
+   - If compilation fails, automatically fixes errors and recompiles
+   - Iterates up to 3 times until code compiles successfully
 
-3. **Skip Translation**: Python files are validated and analyzed without translation
-   - Maintains backward compatibility
-   - Focuses on quality analysis and improvement
+3. **Compilation is Always Required**: The agent will not return results until code compiles successfully
+   - Uses `improve_python_code_tool` to fix any compilation errors
+   - Provides clear error messages if code cannot be fixed after 3 attempts
 
 ## Development
 
@@ -412,16 +421,26 @@ The Lambda function has the following AWS permissions:
 
 ## Recent Improvements
 
+### Workflow Simplification (Latest)
+- **Combined Quality Tools**: Merged `quality_analyzer_tool` and `quality_improvement_tool` into single `improve_python_code_tool`
+  - Reduces from 2 LLM calls to 1 for Python code improvement
+  - Analyzes and applies improvements in a single pass
+  - Faster processing and lower cost
+- **Mandatory Compilation**: All workflows now require successful compilation before returning
+  - Agent automatically fixes compilation errors using `improve_python_code_tool`
+  - Iterates up to 3 times until code compiles successfully
+  - Ensures all generated code is syntactically correct and executable
+- **Streamlined Tool Set**: Reduced from 6 tools to 4 focused tools
+  - `design_specification_tool` - Design analysis
+  - `implementation_from_design_tool` - Python generation
+  - `python_compiler_tool` - Validation (mandatory)
+  - `improve_python_code_tool` - Combined analysis + improvement
+
 ### Performance Optimizations
 - **Removed Redundant Language Detection**: Language detection now happens once in the handler, not again in the orchestrator (saves ~2-3 seconds and 200-300 tokens per translation)
 - **Fixed Processing Success Detection**: Success is now determined by actual workflow outcomes (code generated + compilation passed) rather than naive string matching
 - **Escape Sequence Decoding**: Generated code properly decodes `\n` and `\t` escape sequences for IDE compatibility
 - **SDK Version Pinned**: Using `strands-agents==1.15.0` for stable API and simplified code (98% reduction in response extraction code)
-
-### Simplifications
-- **Removed Unused Tools**: Eliminated `file_processor_tool` (never used) and `compilation_fixer_tool` (ineffective)
-- **Agent Self-Correction**: Agent now intelligently fixes compilation errors by analyzing error messages and regenerating code
-- **Cleaner Codebase**: Reduced from 8 tools to 6 focused tools, removing ~100 lines of unused/ineffective code
 
 ### Bug Fixes
 - **False Negative Detection**: Fixed issue where successful translations were marked as failed due to words like "error" appearing in exception names (e.g., `ZeroDivisionError`)
@@ -436,6 +455,7 @@ The Lambda function has the following AWS permissions:
 - **Pay-per-use**: Only pay for actual translation requests
 - **Single Model**: Claude 3 Sonnet used consistently, simplifying cost management
 - **Efficient Pre-filtering**: Language detection happens before orchestration, avoiding unnecessary LLM calls
+- **Combined Quality Tool**: Single `improve_python_code_tool` reduces LLM calls from 2 to 1 for Python improvements (~50% cost reduction for quality improvements)
 
 ## Security
 

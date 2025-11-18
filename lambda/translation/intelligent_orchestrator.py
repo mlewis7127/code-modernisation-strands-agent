@@ -22,7 +22,7 @@ from .models import CompilationResult, ProcessingOutput
 from .bedrock_compiler import BedrockCompiler
 from .design_specification import design_specification_tool
 from .implementation_generator import implementation_from_design_tool
-from .specialized_agents import quality_analysis_specialist, code_improvement_specialist
+from .specialized_agents import python_code_improvement_specialist
 
 logger = logging.getLogger(__name__)
 
@@ -93,72 +93,35 @@ Compilation time: {result.compilation_time:.3f} seconds"""
 
 
 @tool
-def quality_analyzer_tool(code: str, language: str) -> str:
+def improve_python_code_tool(python_code: str) -> str:
     """
-    Analyze code quality, security vulnerabilities, and best practices.
+    Analyze and improve Python code quality in a single pass.
     
-    Uses a specialized quality analysis agent to provide comprehensive
-    code quality assessment.
-    
-    Args:
-        code: The source code to analyze
-        language: The programming language of the code
-        
-    Returns:
-        String with detailed quality analysis
-    """
-    try:
-        analysis_prompt = f"""Please analyze this {language} code for quality, security, and best practices:
-
-```{language}
-{code}
-```
-
-Provide a comprehensive analysis with specific recommendations for improvement."""
-        
-        analysis_result = quality_analysis_specialist(analysis_prompt)
-        return str(analysis_result)
-        
-    except Exception as e:
-        logger.error(f"Quality analysis failed: {str(e)}")
-        return f"Quality analysis failed: {str(e)}"
-
-
-@tool
-def quality_improvement_tool(code: str, recommendations: str, language: str = "python") -> str:
-    """
-    Apply quality recommendations to improve code based on analysis results.
-    
-    Uses a specialized code improvement agent to refactor and enhance code
-    while maintaining its original functionality.
+    This tool combines quality analysis and improvement into one efficient operation.
+    It analyzes the code for quality issues, security vulnerabilities, best practices,
+    and automatically applies improvements while maintaining functionality.
     
     Args:
-        code: The source code to improve
-        recommendations: Quality analysis recommendations to apply
-        language: The programming language (default: python)
+        python_code: The Python code to analyze and improve
         
     Returns:
-        Improved code with quality recommendations applied
+        String with improvement summary and the complete improved Python code
     """
     try:
-        improvement_prompt = f"""Please improve this {language} code by applying the following quality recommendations:
+        improvement_prompt = f"""Please analyze and improve this Python code:
 
-CURRENT CODE:
-```{language}
-{code}
+```python
+{python_code}
 ```
 
-QUALITY RECOMMENDATIONS TO APPLY:
-{recommendations}
-
-Please provide the complete improved code that incorporates these recommendations while maintaining the original functionality."""
+Analyze the code for quality, security, performance, and best practices, then provide the improved version."""
         
-        improved_result = code_improvement_specialist(improvement_prompt)
+        improved_result = python_code_improvement_specialist(improvement_prompt)
         return str(improved_result)
         
     except Exception as e:
-        logger.error(f"Quality improvement failed: {str(e)}")
-        return f"Quality improvement failed: {str(e)}. Original code returned unchanged:\n\n```{language}\n{code}\n```"
+        logger.error(f"Python code improvement failed: {str(e)}")
+        return f"Python code improvement failed: {str(e)}. Original code returned unchanged:\n\n```python\n{python_code}\n```"
 
 
 class IntelligentTranslationOrchestrator:
@@ -192,8 +155,7 @@ class IntelligentTranslationOrchestrator:
                 design_specification_tool,
                 implementation_from_design_tool,
                 python_compiler_tool,
-                quality_analyzer_tool,
-                quality_improvement_tool
+                improve_python_code_tool
             ],
             agent_id="modernisation_orchestrator",
             name="Code Modernisation Orchestrator"
@@ -211,17 +173,27 @@ AVAILABLE SPECIALIST TOOLS:
 1. design_specification_tool - Analyzes source code and generates a structured design document describing functionality, architecture, and requirements
 2. implementation_from_design_tool - Generates idiomatic Python code from a design specification
 3. python_compiler_tool - Compiles and validates Python code using Bedrock AgentCore
-4. quality_analyzer_tool - Analyzes code quality, security, and best practices
-5. quality_improvement_tool - Applies quality recommendations to improve code
+4. improve_python_code_tool - Analyzes and improves Python code quality in a single pass (combines analysis + improvement)
 
-DESIGN-DRIVEN TRANSLATION WORKFLOW:
-For non-Python code, use this two-phase approach:
-1. First, use design_specification_tool to analyze the source code and create a design document
-   - This captures the code's intent, architecture, data structures, and behavior
-   - The design document provides a language-agnostic understanding of what the code does
-2. Then, use implementation_from_design_tool to generate idiomatic Python from the design
-   - This produces well-structured, Pythonic code that implements the design
+WORKFLOW FOR NON-PYTHON CODE:
+Use this mandatory workflow - ALL steps are required:
+1. design_specification_tool - Analyze source code and create a design document
+   - Captures the code's intent, architecture, data structures, and behavior
+   - Provides a language-agnostic understanding of what the code does
+2. implementation_from_design_tool - Generate idiomatic Python from the design
+   - Produces well-structured, Pythonic code that implements the design
    - Results in high-quality, maintainable code
+3. python_compiler_tool - MANDATORY: Compile and validate the generated Python code
+   - You MUST compile the code - this is not optional
+   - If compilation succeeds, you're done!
+   - If compilation fails, proceed to step 4
+4. IF compilation fails: improve_python_code_tool - Fix the compilation errors
+   - Pass the failing code to this tool to fix the errors
+   - The tool will analyze and fix the issues
+5. python_compiler_tool - MANDATORY: Recompile the fixed code
+   - You MUST verify the fixes worked
+   - If still failing, repeat steps 4-5 up to 2 more times
+   - Do NOT return until code compiles successfully
 
 Benefits of design-driven approach:
 - Captures intent and architecture, not just syntax
@@ -229,34 +201,46 @@ Benefits of design-driven approach:
 - Better handles language-specific patterns and idioms
 - Provides design documentation as a valuable artifact
 
-If the design-driven approach encounters errors, report them clearly so they can be investigated.
+WORKFLOW FOR PYTHON CODE:
+Use this mandatory workflow - ALL steps are required:
+1. improve_python_code_tool - Analyze and improve the Python code in one pass
+   - This tool automatically analyzes quality, security, performance, and best practices
+   - Then applies improvements while maintaining functionality
+   - Returns the improved code ready to use
+2. python_compiler_tool - MANDATORY: Compile and validate the improved code
+   - You MUST compile the code - this is not optional
+   - If compilation succeeds, you're done!
+   - If compilation fails, proceed to step 3
+3. IF compilation fails: improve_python_code_tool - Fix the compilation errors
+   - Pass the failing code to this tool to fix the errors
+4. python_compiler_tool - MANDATORY: Recompile the fixed code
+   - You MUST verify the fixes worked
+   - If still failing, repeat steps 3-4 up to 2 more times
+   - Do NOT return until code compiles successfully
+
+CRITICAL COMPILATION REQUIREMENT:
+- You MUST ALWAYS compile Python code before returning - no exceptions
+- You MUST NOT return until compilation succeeds
+- If compilation fails, use improve_python_code_tool to fix errors and recompile
+- Iterate up to 3 times total if needed to get clean compilation
+- Only report failure if code still doesn't compile after 3 attempts
 
 INTELLIGENT DECISION MAKING:
-- For non-Python code: Use design_specification_tool → implementation_from_design_tool workflow
-- For Python code: Focus on validation and quality improvement
-  * Use python_compiler_tool to validate the code
-  * Use quality_analyzer_tool to identify improvements
-  * Use quality_improvement_tool to apply recommendations
-  * Skip translation tools (design_specification_tool, implementation_from_design_tool)
-- Only compile code if translation occurred, validation is requested, or there are concerns
-- If python_compiler_tool returns errors, analyze them and regenerate corrected code
-- You can call python_compiler_tool multiple times to verify your fixes work
-- Iterate on compilation errors 2-3 times if needed - you can fix them by regenerating better code
-- Analyze quality when requested or when you identify potential issues
-- IMPORTANT: If quality_analyzer_tool provides recommendations, use quality_improvement_tool to apply them
-- Consider file size, complexity, and user intent when deciding on processing steps
+- For non-Python code: design_specification_tool → implementation_from_design_tool → python_compiler_tool → (if errors: improve_python_code_tool → python_compiler_tool)
+- For Python code: improve_python_code_tool → python_compiler_tool → (if errors: improve_python_code_tool → python_compiler_tool)
+- Always iterate on compilation errors until code compiles or max attempts reached
+- If design-driven approach fails, report the error clearly for investigation
 
 EFFICIENCY PRINCIPLES:
-- Skip unnecessary steps to save time and resources
+- Follow the mandatory workflows above - compilation is NOT optional
+- Once code compiles successfully, you're done - don't over-process
 - File information is provided in the user request - use it to make intelligent decisions
-- Make decisions based on what you discover, not predetermined workflows
 - If user has specific requests, prioritize those over default processing
-- If design-driven approach fails, report the error clearly for investigation
+- Remember: ALWAYS compile before returning, iterate on errors until success
 
 RESPONSE FORMAT:
 Always provide clear reasoning for your decisions and summarize what you accomplished.
 Include the actual results from the tools you used.
-If you skip certain steps, explain why.
 If you use the design-driven approach, mention that you created a design specification first.
 
 CRITICAL: At the start of your response, list which tools you used in this format:
@@ -272,7 +256,7 @@ FINAL TRANSLATED CODE:
 
 This is essential for code extraction. Always include this section when:
 - Python code is generated from translation
-- Python code is improved by quality_improvement_tool
+- Python code is improved by improve_python_code_tool
 - Python code is regenerated to fix compilation errors
 
 IMPORTANT: "complete Python code" means EVERYTHING that should be in the final file:
@@ -283,7 +267,7 @@ IMPORTANT: "complete Python code" means EVERYTHING that should be in the final f
 - Any comments or documentation
 - Everything that was in the improved/translated version
 
-If quality_improvement_tool or any other tool added test code, demo code, or if __name__ == "__main__" blocks, you MUST include them in the FINAL TRANSLATED CODE section. Do not omit any part of the code that was generated or improved by the tools. The user expects to receive the exact same code that was successfully compiled and validated.
+If improve_python_code_tool or any other tool added test code, demo code, or if __name__ == "__main__" blocks, you MUST include them in the FINAL TRANSLATED CODE section. Do not omit any part of the code that was generated or improved by the tools. The user expects to receive the exact same code that was successfully compiled and validated.
 
 Even if tools already showed the code, include the COMPLETE final version (with all parts) in this format."""
     
@@ -621,9 +605,7 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
             'design_specification_tool': 'design_specification_tool' in orchestrator_response,
             'implementation_from_design_tool': 'implementation_from_design_tool' in orchestrator_response,
             'python_compiler_tool': 'python_compiler_tool' in orchestrator_response,
-            'quality_analyzer_tool': 'quality_analyzer_tool' in orchestrator_response,
-            'quality_improvement_tool': 'quality_improvement_tool' in orchestrator_response,
-            'file_processor_tool': 'file_processor_tool' in orchestrator_response
+            'improve_python_code_tool': 'improve_python_code_tool' in orchestrator_response
         }
         
         processing_metadata['tools_detected'] = [tool for tool, detected in tool_indicators.items() if detected]
