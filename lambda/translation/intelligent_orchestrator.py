@@ -161,7 +161,7 @@ class IntelligentTranslationOrchestrator:
             name="Code Modernisation Orchestrator"
         )
         
-        logger.info(f"Initialized IntelligentTranslationOrchestrator with model {model_id}")
+        logger.info(f"Initialized Code Modernisation Orchestrator with model {model_id}")
     
     def _get_orchestrator_system_prompt(self) -> str:
         """Get the system prompt for the orchestrator agent."""
