@@ -12,7 +12,7 @@ from .models import (
     ProcessingOutput
 )
 from .intelligent_orchestrator import (
-    IntelligentTranslationOrchestrator,
+    CodeModernisationOrchestrator,
     OrchestrationResult,
     process_code_translation_intelligent
 )
@@ -23,7 +23,7 @@ __all__ = [
     'LanguageDetector',
     
     # Intelligent Orchestration
-    'IntelligentTranslationOrchestrator',
+    'CodeModernisationOrchestrator',
     'OrchestrationResult',
     'process_code_translation_intelligent',
     

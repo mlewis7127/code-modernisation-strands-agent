@@ -10,7 +10,7 @@ from datetime import datetime
 import asyncio
 
 # Import translation components
-from translation.intelligent_orchestrator import IntelligentTranslationOrchestrator
+from translation.intelligent_orchestrator import CodeModernisationOrchestrator
 from translation.language_detector import LanguageDetector
 from translation.s3_output_handler import BackwardCompatibilityHandler, S3OutputHandler
 
@@ -235,9 +235,9 @@ def process_s3_event(event: Dict[str, Any], context, start_time: float) -> Dict[
             logger.info(f"[{request_id}] Running {workflow_type} for {detected_language} code")
             
             try:
-                # Initialize IntelligentTranslationOrchestrator
+                # Initialize CodeModernisationOrchestrator
                 # Uses default Claude 3 Sonnet model and us-east-1 region
-                orchestrator = IntelligentTranslationOrchestrator()
+                orchestrator = CodeModernisationOrchestrator()
                 
                 # Create user request based on detected language
                 if is_python:

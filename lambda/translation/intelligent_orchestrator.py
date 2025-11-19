@@ -1,9 +1,9 @@
 """
-Intelligent Translation Orchestrator using Agents-as-Tools pattern.
+Code Modernisation Orchestrator using Agents-as-Tools pattern.
 
-This module replaces the rigid EventLoopCycleManager with an intelligent orchestrator
-that uses specialist agents as tools, allowing the AI to decide which specialists
-to consult and in what order based on the specific request.
+This module provides an intelligent orchestrator that uses specialist agents as tools
+to modernise and translate code to Python. It follows a streamlined workflow with
+mandatory compilation and automatic error fixing.
 """
 
 import logging
@@ -124,19 +124,19 @@ Analyze the code for quality, security, performance, and best practices, then pr
         return f"Python code improvement failed: {str(e)}. Original code returned unchanged:\n\n```python\n{python_code}\n```"
 
 
-class IntelligentTranslationOrchestrator:
+class CodeModernisationOrchestrator:
     """
-    Intelligent orchestrator that uses the Agents-as-Tools pattern for code translation.
+    Code modernisation orchestrator that uses the Agents-as-Tools pattern.
     
-    Instead of following a rigid workflow, this orchestrator uses an AI agent with
-    specialist tools to intelligently decide what processing is needed based on
-    the specific request and code characteristics.
+    This orchestrator uses an AI agent with specialist tools to intelligently
+    modernise and translate code to Python. It follows a streamlined workflow
+    with mandatory compilation and automatic error fixing.
     """
     
     def __init__(self, 
                  model_id: str = "anthropic.claude-3-sonnet-20240229-v1:0"):
         """
-        Initialize the intelligent orchestrator.
+        Initialize the code modernisation orchestrator.
         
         Args:
             model_id: Bedrock model ID for the orchestrator agent
@@ -662,12 +662,12 @@ async def process_code_translation_intelligent(
     user_request: Optional[str] = None
 ) -> ProcessingOutput:
     """
-    Convenience function that uses intelligent orchestration for code translation.
+    Convenience function that uses intelligent orchestration for code modernisation.
     
-    This function provides a simple interface to the IntelligentTranslationOrchestrator
+    This function provides a simple interface to the CodeModernisationOrchestrator
     for processing code translation requests.
     """
-    orchestrator = IntelligentTranslationOrchestrator()
+    orchestrator = CodeModernisationOrchestrator()
     result = await orchestrator.process_code_request(code_content, file_info, user_request)
     
     # Update processing time in the output
