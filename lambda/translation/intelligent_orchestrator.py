@@ -147,7 +147,7 @@ class CodeModernisationOrchestrator:
         self.orchestrator = Agent(
             model=BedrockModel(
                 model_id=model_id,
-                temperature=0.2,  # Slightly higher for more creative problem-solving
+                temperature=0.2,
                 max_tokens=4000
             ),
             system_prompt=self._get_orchestrator_system_prompt(),
