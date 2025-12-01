@@ -7,7 +7,6 @@ import time
 import boto3
 import os
 from datetime import datetime
-import asyncio
 
 # Import translation components
 from translation.intelligent_orchestrator import CodeModernisationOrchestrator
@@ -245,17 +244,13 @@ def process_s3_event(event: Dict[str, Any], context, start_time: float) -> Dict[
                 else:
                     user_request = f"Process this {detected_language} code file: translate to Python if needed, compile and validate the result, fix any errors, and ensure quality."
                 
-                # Run orchestration workflow with timeout and error handling
+                # Run orchestration workflow with error handling
                 try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    
-                    orchestration_result = loop.run_until_complete(
-                        orchestrator.process_code_request(file_content, file_info, user_request)
+                    orchestration_result = orchestrator.process_code_request(
+                        file_content, file_info, user_request
                     )
                     
                     translation_output = orchestration_result.processing_output
-                    loop.close()
                     
                     if translation_output.processing_success:
                         logger.info(f"[{request_id}] {workflow_type} completed successfully")

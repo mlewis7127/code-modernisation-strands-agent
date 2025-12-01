@@ -66,20 +66,24 @@ export class AgentToolsStack extends cdk.Stack {
       }),
     );
 
-    // Add permissions for Bedrock AgentCore tools (required for code compilation)
+    // Add permissions for Bedrock AgentCore (required for code compilation/interpreter)
     agentToolsFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: [
-          'bedrock-agentcore:*',
-          'bedrock-agentcore-control:*'
+          'bedrock-agentcore:StartCodeInterpreterSession',
+          'bedrock-agentcore:InvokeCodeInterpreter',
+          'bedrock-agentcore:StopCodeInterpreterSession'
         ],
         resources: ['*'],
       }),
     );
 
     // Create S3 buckets for input and output
+    // Generate unique suffix to avoid S3 eventual consistency issues
+    const uniqueSuffix = Date.now().toString().slice(-6);
+    
     const inputBucket = new s3.Bucket(this, 'AgentsAsToolsInputBucket', {
-      bucketName: `agents-as-tools-input-${environment}-${this.account}`,
+      bucketName: `agents-as-tools-input-${environment}-${this.account}-${uniqueSuffix}`,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // For dev environments
       autoDeleteObjects: true, // For dev environments
       eventBridgeEnabled: true, // Enable EventBridge notifications
@@ -93,7 +97,7 @@ export class AgentToolsStack extends cdk.Stack {
     });
 
     const outputBucket = new s3.Bucket(this, 'AgentsAsToolsOutputBucket', {
-      bucketName: `agents-as-tools-output-${environment}-${this.account}`,
+      bucketName: `agents-as-tools-output-${environment}-${this.account}-${uniqueSuffix}`,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // For dev environments
       autoDeleteObjects: true, // For dev environments
       cors: [

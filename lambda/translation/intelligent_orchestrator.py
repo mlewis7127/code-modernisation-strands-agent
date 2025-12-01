@@ -8,7 +8,6 @@ mandatory compilation and automatic error fixing.
 
 import logging
 import time
-import asyncio
 import json
 import re
 from typing import Dict, List, Optional, Any
@@ -271,7 +270,7 @@ If improve_python_code_tool or any other tool added test code, demo code, or if 
 
 Even if tools already showed the code, include the COMPLETE final version (with all parts) in this format."""
     
-    async def process_code_request(self, 
+    def process_code_request(self, 
                                  code_content: str, 
                                  file_info: Dict[str, Any],
                                  user_request: Optional[str] = None) -> OrchestrationResult:
@@ -656,7 +655,7 @@ Don't follow a rigid workflow - adapt based on the actual needs."""
 
 
 # Convenience function for intelligent code translation
-async def process_code_translation_intelligent(
+def process_code_translation_intelligent(
     code_content: str, 
     file_info: Dict[str, Any],
     user_request: Optional[str] = None
@@ -668,7 +667,7 @@ async def process_code_translation_intelligent(
     for processing code translation requests.
     """
     orchestrator = CodeModernisationOrchestrator()
-    result = await orchestrator.process_code_request(code_content, file_info, user_request)
+    result = orchestrator.process_code_request(code_content, file_info, user_request)
     
     # Update processing time in the output
     result.processing_output.processing_time = result.processing_time
